@@ -1,0 +1,19 @@
+#!/bin/sh
+# laex's `claude`: runs the real Claude Code with
+#   - a UserPromptSubmit hook that tells it which file/line/selection you have
+#     open in laex (and the last build result), before every prompt
+#   - the resume-editor system prompt, unless switched off in laex Settings
+# Outside laex (no LAEX_URL) it is the plain claude.
+SHIM_DIR=$(cd "$(dirname "$0")" && pwd)
+PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$SHIM_DIR" | paste -sd: -)
+export PATH
+REAL=$(command -v claude) || { echo "laex: claude is not installed (https://claude.com/claude-code)" >&2; exit 127; }
+[ -n "$LAEX_URL" ] || exec "$REAL" "$@"
+
+HOOK="$SHIM_DIR/claude-context-hook"
+SETTINGS="{\"hooks\":{\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"'$HOOK'\",\"timeout\":5}]}]}}"
+PROMPT=$(curl -fsS -m 2 "${LAEX_URL}api/claude-prompt" 2>/dev/null)
+if [ -n "$PROMPT" ] && [ -f "$PROMPT" ]; then
+  exec "$REAL" --settings "$SETTINGS" --append-system-prompt-file "$PROMPT" "$@"
+fi
+exec "$REAL" --settings "$SETTINGS" "$@"

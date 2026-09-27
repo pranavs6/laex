@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LAEX</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1d70b8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/build/main.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="lx-header">
+  <div class="lx-header__left">
+    <a href="/" class="lx-brand"><span class="lx-brand__mark" aria-hidden="true"></span>LAEX</a>
+    <nav class="lx-breadcrumbs" aria-label="Location">
+      <button type="button" class="lx-breadcrumbs__link" id="project" title="Choose project folder">
+        <span id="project-name"></span>
+      </button>
+      <span class="lx-breadcrumbs__sep" aria-hidden="true"></span>
+      <span class="lx-breadcrumbs__current" id="main-name"></span>
+    </nav>
+  </div>
+  <button type="button" class="lx-header__menu" id="menu-toggle" aria-controls="settings" aria-expanded="false">
+    <svg class="lx-header__chev" width="16" height="10" viewBox="0 0 16 10" fill="none" aria-hidden="true">
+      <path d="M1.5 1.5 8 8l6.5-6.5" stroke="currentColor" stroke-width="2.5"/>
+    </svg>Settings
+  </button>
+</header>
+
+<div class="lx-phase">
+  <p class="lx-phase__content">
+    <strong class="lx-tag lx-tag--grey" id="status">Starting</strong>
+    <span class="lx-phase__text" id="build-msg">Getting your document ready.</span>
+  </p>
+  <div class="lx-phase__actions">
+    <div class="lx-checkbox lx-checkbox--small">
+      <input type="checkbox" id="auto" class="lx-checkbox__input">
+      <label for="auto" class="lx-checkbox__label">Auto-refresh</label>
+    </div>
+    <button type="button" class="lx-button" id="compile">Recompile</button>
+    <a class="lx-button lx-button--secondary" id="download" href="#" download>Download PDF</a>
+  </div>
+</div>
+
+<nav class="lx-menu" id="settings" aria-label="Settings" hidden>
+  <div class="lx-menu__grid">
+    <div>
+      <h2 class="lx-menu__heading">Document</h2>
+      <div class="lx-form-group">
+        <label class="lx-label" for="main">Main document</label>
+        <span class="lx-hint">The file latexmk builds</span>
+        <select class="lx-select" id="main"></select>
+      </div>
+      <div class="lx-form-group">
+        <label class="lx-label" for="engine">Engine</label>
+        <select class="lx-select" id="engine">
+          <option value="pdflatex">pdfLaTeX</option>
+          <option value="xelatex">XeLaTeX</option>
+          <option value="lualatex">LuaLaTeX</option>
+        </select>
+      </div>
+    </div>
+    <div>
+      <h2 class="lx-menu__heading">Preview and text</h2>
+      <div class="lx-form-group">
+        <label class="lx-label" for="interval">Auto-refresh interval</label>
+        <span class="lx-hint">Seconds between save-and-rebuild checks</span>
+        <input class="lx-input lx-input--short" id="interval" type="number" min="0.5" max="30" step="0.5">
+      </div>
+      <div class="lx-form-group lx-form-group--row">
+        <div>
+          <label class="lx-label" for="editor-size">Editor size</label>
+          <input class="lx-input lx-input--short" id="editor-size" type="number" min="9" max="28">
+        </div>
+        <div>
+          <label class="lx-label" for="term-size">Terminal size</label>
+          <input class="lx-input lx-input--short" id="term-size" type="number" min="9" max="28">
+        </div>
+      </div>
+      <div class="lx-checkbox lx-checkbox--small">
+        <input type="checkbox" id="invert" class="lx-checkbox__input">
+        <label for="invert" class="lx-checkbox__label">Dark PDF (invert colours)</label>
+      </div>
+    </div>
+    <div>
+      <h2 class="lx-menu__heading">Claude</h2>
+      <p class="lx-hint">Run <code>claude</code> in the terminal. Before each message it is told the file, line and selection you have open, and the last build result.</p>
+      <div class="lx-checkbox lx-checkbox--small">
+        <input type="checkbox" id="claude-prompt" class="lx-checkbox__input">
+        <label for="claude-prompt" class="lx-checkbox__label">Resume-editor system prompt</label>
+      </div>
+      <p class="lx-hint lx-hint--after">Takes effect the next time <code>claude</code> starts.</p>
+      <p class="lx-actions">
+        <button type="button" class="lx-link" id="edit-prompt">Edit system prompt</button>
+        <button type="button" class="lx-link" id="reset-prompt">Reset to default</button>
+      </p>
+    </div>
+    <div>
+      <h2 class="lx-menu__heading">Shortcuts</h2>
+      <p class="lx-hint">Select a box and press the new key combination. Backspace clears it.</p>
+      <dl class="lx-shortcuts" id="shortcuts"></dl>
+      <button type="button" class="lx-link" id="reset-shortcuts">Reset shortcuts</button>
+    </div>
+  </div>
+</nav>
+
+<div class="lx-app" id="app">
+  <aside class="lx-card lx-files" id="files" aria-labelledby="files-title">
+    <div class="lx-card__head">
+      <h2 class="lx-card__title" id="files-title">Files</h2>
+      <ul class="lx-card__actions">
+        <li><button type="button" class="lx-link" id="new-file">New file</button></li>
+        <li><button type="button" class="lx-link" id="new-folder">New folder</button></li>
+        <li><button type="button" class="lx-link" id="collapse-files" title="Hide files">Hide</button></li>
+      </ul>
+    </div>
+    <ul class="lx-list" id="tree" role="tree" aria-labelledby="files-title"></ul>
+  </aside>
+  <button type="button" class="lx-files-rail" id="expand-files" hidden>
+    <span>Show files</span>
+  </button>
+
+  <main class="lx-work" id="work">
+    <section class="lx-left" id="left">
+      <div class="lx-card" id="editor-pane">
+        <div class="lx-card__head">
+          <div class="lx-card__heading">
+            <span class="lx-card__caption" id="dirty"></span>
+            <h2 class="lx-card__title lx-card__title--file" id="current-file"></h2>
+          </div>
+        </div>
+        <div class="lx-banner" id="conflict" hidden>
+          <span class="lx-warning-icon" aria-hidden="true">!</span>
+          <span id="conflict-text">This file changed on disk.</span>
+          <button type="button" class="lx-link" id="conflict-load">Load disk version</button>
+          <button type="button" class="lx-link" id="conflict-keep">Keep mine</button>
+        </div>
+        <div class="lx-card__body" id="editor"></div>
+      </div>
+      <div class="lx-gutter lx-gutter--row" id="gutter-left" role="separator" aria-orientation="horizontal" title="Drag to resize. Double-click to reset."></div>
+      <div class="lx-card lx-card--term" id="term-pane">
+        <div class="lx-card__head">
+          <div class="lx-card__heading">
+            <span class="lx-card__caption" id="term-meta"></span>
+            <h2 class="lx-card__title">Terminal</h2>
+          </div>
+          <ul class="lx-card__actions">
+            <li><button type="button" class="lx-link" id="start-claude">Run claude</button></li>
+            <li><button type="button" class="lx-link" id="restart-shell">Restart shell</button></li>
+          </ul>
+        </div>
+        <div class="lx-card__body lx-term" id="terminal"></div>
+      </div>
+    </section>
+
+    <div class="lx-gutter lx-gutter--col" id="gutter-main" role="separator" aria-orientation="vertical" title="Drag to resize. Double-click to reset."></div>
+
+    <section class="lx-card lx-card--preview" id="pdf-pane">
+      <div class="lx-card__head lx-card__head--tabs">
+        <ul class="lx-tabs" role="tablist">
+          <li class="lx-tabs__item"><button type="button" class="lx-tabs__tab" role="tab" id="tab-preview" aria-selected="true">Preview</button></li>
+          <li class="lx-tabs__item"><button type="button" class="lx-tabs__tab" role="tab" id="tab-log" aria-selected="false">Build log</button></li>
+        </ul>
+        <span class="lx-card__caption lx-card__caption--inline" id="pdf-meta"></span>
+        <div class="lx-zoom" role="group" aria-label="Zoom">
+          <button type="button" class="lx-zoom__btn" id="zoom-out" title="Zoom out">&minus;</button>
+          <button type="button" class="lx-zoom__btn lx-zoom__btn--text" id="zoom-fit" title="Fit width">Fit</button>
+          <button type="button" class="lx-zoom__btn" id="zoom-in" title="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="lx-errors" id="errors" role="alert" hidden>
+        <h2 class="lx-errors__title" id="errors-title">There is a problem</h2>
+        <ul class="lx-errors__list" id="errors-list"></ul>
+      </div>
+      <div class="lx-card__body lx-pdf" id="pdf">
+        <p class="lx-empty" id="pdf-empty">No PDF yet. Select Recompile or turn on Auto-refresh.</p>
+      </div>
+      <pre class="lx-card__body lx-log" id="log" hidden></pre>
+    </section>
+  </main>
+</div>
+
+<footer class="lx-footer">
+  <span id="footer-keys"></span>
+  <span class="lx-footer__meta">Built with latexmk <span aria-hidden="true">·</span> Double-click the preview to jump to source</span>
+</footer>
+
+<div class="lx-modal" id="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" hidden>
+  <div class="lx-modal__box">
+    <span class="lx-caption">Project</span>
+    <h2 class="lx-modal__title" id="picker-title">Choose a project folder</h2>
+    <p class="lx-hint">laex reopens on the folder you choose, and the terminal restarts there.</p>
+    <form class="lx-picker__form" id="picker-form">
+      <label class="lx-label" for="picker-path">Folder</label>
+      <div class="lx-picker__row">
+        <input class="lx-input lx-picker__input" id="picker-path" spellcheck="false" autocomplete="off">
+        <button type="submit" class="lx-button lx-button--secondary">Go</button>
+      </div>
+    </form>
+    <nav class="lx-crumbs" id="picker-crumbs" aria-label="Folder path"></nav>
+    <p class="lx-picker__note" id="picker-note"></p>
+    <ul class="lx-picker__list" id="picker-list"></ul>
+    <div id="picker-recent-wrap">
+      <h3 class="lx-label">Recent</h3>
+      <ul class="lx-picker__recent" id="picker-recent"></ul>
+    </div>
+    <div class="lx-modal__actions">
+      <button type="button" class="lx-button" id="picker-open">Open this folder</button>
+      <button type="button" class="lx-link" id="picker-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/build/main.js"></script>
+</body>
+</html>

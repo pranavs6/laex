@@ -1,0 +1,6 @@
+#!/bin/sh
+# UserPromptSubmit hook: whatever this prints is added to Claude's context.
+cat > /dev/null
+[ -n "$LAEX_URL" ] || exit 0
+curl -fsS -m 2 "${LAEX_URL}api/context" 2>/dev/null
+exit 0

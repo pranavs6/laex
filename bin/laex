@@ -1,0 +1,13 @@
+#!/bin/sh
+# laex [project-dir]  -  open the editor on a LaTeX project (default: laex/files)
+# LAEX_PORT=4777 by default; the next free port is used if it is taken.
+set -e
+SELF="$0"
+while [ -L "$SELF" ]; do
+  LINK=$(readlink "$SELF")
+  case "$LINK" in /*) SELF="$LINK" ;; *) SELF="$(dirname "$SELF")/$LINK" ;; esac
+done
+APP_DIR=$(cd "$(dirname "$SELF")/.." && pwd)
+if [ -z "$1" ]; then exec node "$APP_DIR/server.js" --open; fi
+if [ ! -d "$1" ]; then echo "laex: no such directory: $1" >&2; exit 1; fi
+exec node "$APP_DIR/server.js" "$1" --open
