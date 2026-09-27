@@ -1,5 +1,7 @@
 import * as pdfjs from "pdfjs-dist";
 
+export { pdfjs };
+
 pdfjs.GlobalWorkerOptions.workerSrc = "/build/pdf.worker.min.mjs";
 
 // Renders every page to canvas. A reload renders off-screen and swaps in one
@@ -140,6 +142,27 @@ export class PdfView {
       }
       this.el.scrollTo({ top: pageBox.offsetTop + offset - 10, behavior: "smooth" });
     } catch {}
+  }
+
+  // Forward SyncTeX: scroll to a box given in PDF points (top-left origin)
+  // and flash it.
+  reveal({ page, x, y, w, h }) {
+    const box = this.el.querySelector(`.lx-pdf__page[data-page="${page}"]`);
+    const scale = this.pageScale[page - 1];
+    if (!box || !scale) return;
+    const top = (y - h) * scale, left = x * scale;
+    const mark = document.createElement("div");
+    mark.className = "lx-pdf__reveal";
+    Object.assign(mark.style, { top: `${top - 3}px`, left: `${left - 4}px`, width: `${Math.max(w * scale, 40) + 8}px`, height: `${Math.max(h * scale, 12) + 6}px` });
+    box.appendChild(mark);
+    setTimeout(() => mark.remove(), 1800);
+    this.el.scrollTo({ top: box.offsetTop + top - this.el.clientHeight / 3, behavior: "smooth" });
+  }
+
+  clear() {
+    this.doc?.destroy();
+    this.doc = null;
+    this.el.querySelector(".lx-pdf__pages")?.remove();
   }
 
   setZoom(z) {

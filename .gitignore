@@ -31,3 +31,11 @@ Thumbs.db
 .env.*
 .claude/settings.local.json
 npm-debug.log*
+
+# Desktop app build
+desktop/node_modules/
+desktop/dist/
+desktop/laex-root.json
+
+# Per-project laex data (versions, job description) if a project lives here
+.laex/

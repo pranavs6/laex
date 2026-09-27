@@ -14,6 +14,8 @@ import { spawn, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import pty from "node-pty";
+import { createVersions } from "./lib/versions.js";
+import { search, replace } from "./lib/search.js";
 
 const args = process.argv.slice(2);
 const OPEN = args.includes("--open");
@@ -25,7 +27,7 @@ const SHIM_DIR = path.join(APP_DIR, "shim");
 const HOME = os.homedir();
 // Bumped whenever the API changes, so a page served by a newer build can tell
 // the server behind it is stale and needs a restart.
-const API_VERSION = 2;
+const API_VERSION = 3;
 
 // Build output lives in the user cache, not the project, so the project
 // directory only ever holds files you wrote.
@@ -34,6 +36,8 @@ const CACHE = process.platform === "darwin"
   : path.join(process.env.XDG_CACHE_HOME || path.join(HOME, ".cache"), "laex");
 const CONFIG = path.join(process.env.XDG_CONFIG_HOME || path.join(HOME, ".config"), "laex");
 const PROMPT_FILE = path.join(CONFIG, "resume-editor.md");
+const DICT_FILE = path.join(CONFIG, "dictionary.txt");
+const DICTS = { "en-GB": "dictionary-en-gb", "en-US": "dictionary-en" };
 const hash = (s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 12);
 
 const TEXT_EXT = new Set([".tex", ".bib", ".cls", ".sty", ".bst", ".bbx", ".cbx", ".txt", ".md",
@@ -52,6 +56,7 @@ const outRoot = () => path.join(CACHE, hash(ROOT));
 // Seed the editable system prompt from the bundled default on first run.
 fs.mkdirSync(CONFIG, { recursive: true });
 if (!fs.existsSync(PROMPT_FILE)) fs.copyFileSync(path.join(APP_DIR, "prompts", "resume-editor.md"), PROMPT_FILE);
+if (!fs.existsSync(DICT_FILE)) fs.writeFileSync(DICT_FILE, "");
 
 const err = (status, message) => Object.assign(new Error(message), { status });
 
@@ -144,6 +149,12 @@ async function fileOp({ op, path: rel, to }) {
     if (fs.existsSync(dest)) throw err(409, `${to} already exists`);
     await fsp.mkdir(path.dirname(dest), { recursive: true });
     await fsp.rename(abs, dest);
+  } else if (op === "copy") {
+    const dest = inRoot(to);
+    validName(path.basename(dest));
+    if (fs.existsSync(dest)) throw err(409, `${to} already exists`);
+    await fsp.mkdir(path.dirname(dest), { recursive: true });
+    await fsp.copyFile(abs, dest);
   } else if (op === "trash") {
     if (abs === ROOT) throw err(400, "cannot delete the project folder");
     await moveToTrash(abs);
@@ -232,9 +243,13 @@ function parseLog(log, cwd) {
     errors.push({ file, line: Number(m[2]), message: m[3].trim(), context });
   }
   const warnings = (log.match(/^(LaTeX|Package \S+) Warning/gm) || []).length;
+  const overfullLines = [];
+  for (const m of log.matchAll(/^Overfull \\hbox \(([\d.]+)pt too wide\) (?:in paragraph|in alignment|detected) at lines? (\d+)/gm)) {
+    overfullLines.push({ line: Number(m[2]), pt: Number(m[1]) });
+  }
   const overfull = (log.match(/^Overfull \\hbox/gm) || []).length;
   const pages = Number((log.match(/Output written on [\s\S]*?\((\d+) pages?/) || [])[1]) || null;
-  return { errors, warnings, overfull, pages };
+  return { errors, warnings, overfull, overfullLines, pages };
 }
 
 function runLatexmk(mainRel, engine) {
@@ -295,6 +310,28 @@ function synctexEdit(mainRel, page, x, y) {
         try { file = relOf(inRoot(path.resolve(path.dirname(inRoot(mainRel)), input[1].trim()))); } catch { return resolve(null); }
         resolve({ file, line: Number(line[1]) });
       });
+  });
+}
+
+// Source position -> PDF position, for "Show in PDF".
+function synctexView(mainRel, fileRel, line, col) {
+  return new Promise((resolve) => {
+    execFile("synctex", ["view", "-i", `${line}:${col}:${inRoot(fileRel)}`, "-o", pdfPathFor(mainRel)],
+      { env: { ...process.env, PATH: ENV_PATH } }, (e, stdout) => {
+        if (e) return resolve(null);
+        const num = (k) => Number((stdout.match(new RegExp(`^${k}:([\\d.-]+)$`, "m")) || [])[1]);
+        const page = num("Page");
+        if (!page) return resolve(null);
+        resolve({ page, x: num("h"), y: num("v"), w: num("W"), h: num("H") });
+      });
+  });
+}
+
+// PDF -> plain text, the way an applicant tracking system would read it.
+function pdfText(mainRel) {
+  return new Promise((resolve) => {
+    execFile("pdftotext", ["-enc", "UTF-8", pdfPathFor(mainRel), "-"], { env: { ...process.env, PATH: ENV_PATH }, maxBuffer: 8 << 20 },
+      (e, stdout) => resolve(e ? null : stdout));
   });
 }
 
@@ -455,6 +492,45 @@ async function switchRoot(dir) {
   emit({ type: "root", root: ROOT });
 }
 
+// ---------------------------------------------------------------- versions
+const versions = createVersions({
+  getRoot: () => ROOT,
+  listTextFiles: async () => (await listTree()).filter((e) => e.type === "file" && e.text).map((e) => e.path),
+  pdfPathFor,
+});
+
+// ------------------------------------------------------------- ask claude
+// "Ask Claude" buttons send a prompt to the terminal. If Claude is already
+// running there, the prompt is pasted and submitted. If the terminal is idle
+// at a shell prompt, claude is started with the prompt. Anything else (an
+// editor, a pager) is left alone.
+const SHELLS = new Set(["zsh", "bash", "sh", "fish", "dash", "ksh", "tcsh", "nu"]);
+const shellQuote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+
+function terminalState() {
+  const proc = shell ? path.basename(shell.process || "") : null;
+  return { running: !!shell, process: proc, claude: proc === "claude", idle: !proc || SHELLS.has(proc) };
+}
+
+function askClaude(prompt) {
+  if (!shell) startShell();
+  const t = terminalState();
+  const text = String(prompt || "").replace(/\r/g, "").slice(0, 20000);
+  if (!text.trim()) throw err(400, "empty prompt");
+  if (t.claude) {
+    shell.write(`\x1b[200~${text}\x1b[201~`);
+    setTimeout(() => shell?.write("\r"), 80);
+    return { sent: "claude" };
+  }
+  if (t.idle) {
+    shell.write(` claude ${shellQuote(text)}\r`);
+    return { sent: "shell" };
+  }
+  throw err(409, `The terminal is busy running ${t.process}. Close it, or start claude, and try again.`);
+}
+
+const safeName = (s) => String(s || "").replace(/[^\w .()&+,-]+/g, "").replace(/\s+/g, " ").trim().slice(0, 120);
+
 // ------------------------------------------------------------------- http
 const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript",
@@ -521,7 +597,10 @@ async function handle(req, res) {
       const data = await fsp.readFile(file).catch(() => null);
       if (!data) return send(res, 404, { error: "no pdf yet" });
       const headers = { "Content-Type": "application/pdf", "Cache-Control": "no-store" };
-      if (q.download) headers["Content-Disposition"] = `attachment; filename="${path.basename(file).replace(/"/g, "")}"`;
+      if (q.download) {
+      const name = (safeName(q.name) || path.basename(file, ".pdf")) + ".pdf";
+      headers["Content-Disposition"] = `attachment; filename="${name}"`;
+    }
       res.writeHead(200, headers);
       return res.end(data);
     }
@@ -558,6 +637,102 @@ async function handle(req, res) {
     case "POST /api/prompt/reset":
       await fsp.copyFile(path.join(APP_DIR, "prompts", "resume-editor.md"), PROMPT_FILE);
       return send(res, 200, { ok: true });
+
+    case "GET /api/synctex/view":
+      inRoot(q.main);
+      return send(res, 200, (await synctexView(q.main, q.file, Number(q.line) || 1, Number(q.col) || 0)) || {});
+    case "GET /api/text": {
+      inRoot(q.main);
+      const text = await pdfText(q.main);
+      return text === null ? send(res, 501, { error: "pdftotext unavailable" }) : send(res, 200, text, "text/plain; charset=utf-8");
+    }
+
+    // Versions
+    case "GET /api/versions":
+      return send(res, 200, await versions.list());
+    case "POST /api/versions": {
+      const b = await readJson(req);
+      if (b.main) inRoot(b.main);
+      return send(res, 200, await versions.save({ label: b.label, main: b.main }));
+    }
+    case "GET /api/versions/file": {
+      const text = await versions.fileAt(q.id, q.path);
+      return text === null ? send(res, 404, { error: "not in this version" }) : send(res, 200, text, "text/plain; charset=utf-8");
+    }
+    case "GET /api/versions/pdf": {
+      const data = await fsp.readFile(versions.pdfOf(q.id)).catch(() => null);
+      if (!data) return send(res, 404, { error: "no pdf in this version" });
+      res.writeHead(200, { "Content-Type": "application/pdf", "Cache-Control": "no-store" });
+      return res.end(data);
+    }
+    case "POST /api/versions/restore": {
+      const b = await readJson(req);
+      return send(res, 200, await versions.restore(b.id, b.main));
+    }
+    case "POST /api/versions/rename": {
+      const b = await readJson(req);
+      return send(res, 200, await versions.rename(b.id, b.label));
+    }
+    case "POST /api/versions/delete":
+      await versions.remove((await readJson(req)).id);
+      return send(res, 200, { ok: true });
+
+    // Find and replace
+    case "POST /api/search": {
+      const files = (await projectInfo()).files;
+      return send(res, 200, await search(ROOT, files, await readJson(req)));
+    }
+    case "POST /api/replace": {
+      const b = await readJson(req);
+      const all = (await projectInfo()).files;
+      const files = Array.isArray(b.files) ? b.files.filter((f) => all.includes(f)) : all;
+      const r = await replace(ROOT, files, { ...b, replacement: String(b.replacement ?? "") });
+      // The editor applies these itself; don't echo them back as outside edits.
+      for (const c of r.changed) lastWritten.set(c.file, c.text);
+      return send(res, 200, r);
+    }
+
+    // Terminal and Claude
+    case "GET /api/terminal":
+      return send(res, 200, terminalState());
+    case "POST /api/claude/ask":
+      return send(res, 200, askClaude((await readJson(req)).prompt));
+
+    // Spelling
+    case "GET /api/dict": {
+      const pkg = DICTS[q.lang] || DICTS["en-GB"];
+      const dir = path.join(APP_DIR, "node_modules", pkg);
+      const [aff, dic] = await Promise.all([fsp.readFile(path.join(dir, "index.aff"), "utf8"), fsp.readFile(path.join(dir, "index.dic"), "utf8")]);
+      return send(res, 200, { aff, dic });
+    }
+    case "GET /api/dict/words": {
+      const tech = await fsp.readFile(path.join(APP_DIR, "dict", "tech-words.txt"), "utf8").catch(() => "");
+      const personal = await fsp.readFile(DICT_FILE, "utf8").catch(() => "");
+      return send(res, 200, { tech: tech.split(/\s+/).filter(Boolean), personal: personal.split(/\r?\n/).map((w) => w.trim()).filter(Boolean) });
+    }
+    case "POST /api/dict/add": {
+      const word = String((await readJson(req)).word || "").trim();
+      if (!/^[\p{L}\p{N}'’.-]{1,60}$/u.test(word)) throw err(400, "not a word");
+      const current = (await fsp.readFile(DICT_FILE, "utf8").catch(() => "")).split(/\r?\n/).filter(Boolean);
+      if (!current.includes(word)) await fsp.writeFile(DICT_FILE, [...current, word].join("\n") + "\n");
+      return send(res, 200, { ok: true });
+    }
+    case "GET /api/dict/personal":
+      return send(res, 200, await fsp.readFile(DICT_FILE, "utf8").catch(() => ""), "text/plain; charset=utf-8");
+    case "PUT /api/dict/personal":
+      await fsp.writeFile(DICT_FILE, await readBody(req), "utf8");
+      return send(res, 200, { ok: true });
+
+    // Job description for the job-match tab, kept with the project
+    case "GET /api/job":
+      return send(res, 200, await fsp.readFile(path.join(ROOT, ".laex", "job.md"), "utf8").catch(() => ""), "text/plain; charset=utf-8");
+    case "PUT /api/job": {
+      await fsp.mkdir(path.join(ROOT, ".laex"), { recursive: true });
+      const ignore = path.join(ROOT, ".laex", ".gitignore");
+      if (!fs.existsSync(ignore)) await fsp.writeFile(ignore, "*\n");
+      await fsp.writeFile(path.join(ROOT, ".laex", "job.md"), await readBody(req), "utf8");
+      return send(res, 200, { ok: true });
+    }
   }
 
   if (req.method === "GET" && !url.pathname.startsWith("/api/")) {

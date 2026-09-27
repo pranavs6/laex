@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <title>LAEX</title>
@@ -33,6 +33,7 @@
   <p class="lx-phase__content">
     <strong class="lx-tag lx-tag--grey" id="status">Starting</strong>
     <span class="lx-phase__text" id="build-msg">Getting your document ready.</span>
+    <span class="lx-phase__checks" id="check-tags"></span>
   </p>
   <div class="lx-phase__actions">
     <div class="lx-checkbox lx-checkbox--small">
@@ -40,6 +41,7 @@
       <label for="auto" class="lx-checkbox__label">Auto-refresh</label>
     </div>
     <button type="button" class="lx-button" id="compile">Recompile</button>
+    <button type="button" class="lx-button lx-button--secondary" id="save-version">Save version</button>
     <a class="lx-button lx-button--secondary" id="download" href="#" download>Download PDF</a>
   </div>
 </div>
@@ -61,9 +63,35 @@
           <option value="lualatex">LuaLaTeX</option>
         </select>
       </div>
+      <div class="lx-form-group">
+        <label class="lx-label" for="page-limit">Page limit</label>
+        <span class="lx-hint">Warns when the PDF is longer. 0 turns it off.</span>
+        <input class="lx-input lx-input--short" id="page-limit" type="number" min="0" max="20">
+      </div>
     </div>
     <div>
-      <h2 class="lx-menu__heading">Preview and text</h2>
+      <h2 class="lx-menu__heading">Download</h2>
+      <div class="lx-form-group">
+        <label class="lx-label" for="your-name">Your name</label>
+        <span class="lx-hint">Read from pdfauthor if left empty</span>
+        <input class="lx-input" id="your-name" autocomplete="name">
+      </div>
+      <div class="lx-form-group">
+        <label class="lx-label" for="file-pattern">File name</label>
+        <span class="lx-hint">Uses {name}, {company}, {main} and {date}. {company} comes from a main file such as cv_monzo.tex.</span>
+        <input class="lx-input" id="file-pattern" spellcheck="false">
+        <span class="lx-hint lx-hint--example" id="file-example"></span>
+      </div>
+    </div>
+    <div>
+      <h2 class="lx-menu__heading">Preview and editor</h2>
+      <div class="lx-form-group">
+        <label class="lx-label" for="theme">Appearance</label>
+        <select class="lx-select" id="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
       <div class="lx-form-group">
         <label class="lx-label" for="interval">Auto-refresh interval</label>
         <span class="lx-hint">Seconds between save-and-rebuild checks</span>
@@ -93,6 +121,22 @@
       </div>
     </div>
     <div>
+      <h2 class="lx-menu__heading">Spelling</h2>
+      <div class="lx-checkbox lx-checkbox--small">
+        <input type="checkbox" id="spell-on" class="lx-checkbox__input">
+        <label for="spell-on" class="lx-checkbox__label">Check spelling</label>
+      </div>
+      <div class="lx-form-group lx-form-group--spaced">
+        <label class="lx-label" for="spell-lang">Language</label>
+        <select class="lx-select" id="spell-lang">
+          <option value="en-GB">British English</option>
+          <option value="en-US">American English</option>
+        </select>
+      </div>
+      <p class="lx-hint">Only prose is checked: commands, maths, URLs and the preamble are skipped. Common tech words are built in.</p>
+      <p class="lx-actions"><button type="button" class="lx-link" id="edit-dict">Edit personal dictionary</button></p>
+    </div>
+    <div>
       <h2 class="lx-menu__heading">Claude</h2>
       <p class="lx-hint">Run <code>claude</code> in the terminal. Before each message it is told the file, line and selection you have open, and the last build result.</p>
       <div class="lx-checkbox lx-checkbox--small">
@@ -100,6 +144,11 @@
         <label for="claude-prompt" class="lx-checkbox__label">Resume-editor system prompt</label>
       </div>
       <p class="lx-hint lx-hint--after">Takes effect the next time <code>claude</code> starts.</p>
+      <div class="lx-checkbox lx-checkbox--small">
+        <input type="checkbox" id="review-on" class="lx-checkbox__input">
+        <label for="review-on" class="lx-checkbox__label">Review outside edits</label>
+      </div>
+      <p class="lx-hint lx-hint--after">Changes made by Claude or other programs show as a diff you accept or reject, chunk by chunk.</p>
       <p class="lx-actions">
         <button type="button" class="lx-link" id="edit-prompt">Edit system prompt</button>
         <button type="button" class="lx-link" id="reset-prompt">Reset to default</button>
@@ -115,19 +164,48 @@
 </nav>
 
 <div class="lx-app" id="app">
-  <aside class="lx-card lx-files" id="files" aria-labelledby="files-title">
-    <div class="lx-card__head">
-      <h2 class="lx-card__title" id="files-title">Files</h2>
-      <ul class="lx-card__actions">
+  <aside class="lx-card lx-files" id="files" aria-label="Sidebar">
+    <div class="lx-card__head lx-card__head--tabs">
+      <ul class="lx-tabs lx-tabs--side" role="tablist">
+        <li><button type="button" class="lx-tabs__tab" role="tab" id="side-files" aria-selected="true">Files</button></li>
+        <li><button type="button" class="lx-tabs__tab" role="tab" id="side-outline" aria-selected="false">Outline</button></li>
+        <li><button type="button" class="lx-tabs__tab" role="tab" id="side-search" aria-selected="false">Search</button></li>
+      </ul>
+      <button type="button" class="lx-tool" id="collapse-files" title="Hide sidebar" aria-label="Hide sidebar">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2 4 7l5 5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </div>
+    <div class="lx-side" id="pane-files">
+      <ul class="lx-card__actions lx-card__actions--bar">
         <li><button type="button" class="lx-link" id="new-file">New file</button></li>
         <li><button type="button" class="lx-link" id="new-folder">New folder</button></li>
-        <li><button type="button" class="lx-link" id="collapse-files" title="Hide files">Hide</button></li>
       </ul>
+      <ul class="lx-list" id="tree" role="tree" aria-label="Files"></ul>
     </div>
-    <ul class="lx-list" id="tree" role="tree" aria-labelledby="files-title"></ul>
+    <div class="lx-side" id="pane-outline" hidden>
+      <ul class="lx-list lx-outline" id="outline" aria-label="Outline"></ul>
+    </div>
+    <div class="lx-side" id="pane-search" hidden>
+      <form class="lx-search" id="search-form" role="search">
+        <label class="lx-label lx-label--small" for="search-q">Find</label>
+        <input class="lx-input lx-input--full" id="search-q" spellcheck="false" autocomplete="off">
+        <label class="lx-label lx-label--small" for="search-r">Replace with</label>
+        <input class="lx-input lx-input--full" id="search-r" spellcheck="false" autocomplete="off">
+        <div class="lx-search__opts">
+          <div class="lx-checkbox lx-checkbox--tiny"><input type="checkbox" id="search-case" class="lx-checkbox__input"><label for="search-case" class="lx-checkbox__label">Match case</label></div>
+          <div class="lx-checkbox lx-checkbox--tiny"><input type="checkbox" id="search-word" class="lx-checkbox__input"><label for="search-word" class="lx-checkbox__label">Whole word</label></div>
+          <div class="lx-checkbox lx-checkbox--tiny"><input type="checkbox" id="search-regex" class="lx-checkbox__input"><label for="search-regex" class="lx-checkbox__label">Regex</label></div>
+        </div>
+        <div class="lx-search__bar">
+          <span class="lx-hint" id="search-summary" role="status"></span>
+          <button type="button" class="lx-button lx-button--secondary lx-button--small" id="search-replace-all">Replace all</button>
+        </div>
+      </form>
+      <ul class="lx-list lx-search__results" id="search-results"></ul>
+    </div>
   </aside>
   <button type="button" class="lx-files-rail" id="expand-files" hidden>
-    <span>Show files</span>
+    <span>Show sidebar</span>
   </button>
 
   <main class="lx-work" id="work">
@@ -138,6 +216,24 @@
             <span class="lx-card__caption" id="dirty"></span>
             <h2 class="lx-card__title lx-card__title--file" id="current-file"></h2>
           </div>
+          <ul class="lx-card__actions">
+            <li><button type="button" class="lx-link" id="show-in-pdf">Show in PDF</button></li>
+            <li class="lx-dropdown">
+              <button type="button" class="lx-link" id="ask-claude" aria-haspopup="menu" aria-expanded="false" aria-controls="claude-menu">Ask Claude</button>
+              <div class="lx-dropdown__menu" id="claude-menu" role="menu" hidden></div>
+            </li>
+          </ul>
+        </div>
+        <div class="lx-banner lx-banner--review" id="review" hidden>
+          <span class="lx-warning-icon" aria-hidden="true">!</span>
+          <span id="review-text">This file was changed outside the editor.</span>
+          <span class="lx-review-nav">
+            <button type="button" class="lx-link" id="review-prev">Previous</button>
+            <span id="review-pos" aria-live="polite"></span>
+            <button type="button" class="lx-link" id="review-next">Next change</button>
+          </span>
+          <button type="button" class="lx-button lx-button--small" id="review-accept">Accept all</button>
+          <button type="button" class="lx-button lx-button--warning lx-button--small" id="review-reject">Reject all</button>
         </div>
         <div class="lx-banner" id="conflict" hidden>
           <span class="lx-warning-icon" aria-hidden="true">!</span>
@@ -167,25 +263,40 @@
 
     <section class="lx-card lx-card--preview" id="pdf-pane">
       <div class="lx-card__head lx-card__head--tabs">
-        <ul class="lx-tabs" role="tablist">
-          <li class="lx-tabs__item"><button type="button" class="lx-tabs__tab" role="tab" id="tab-preview" aria-selected="true">Preview</button></li>
-          <li class="lx-tabs__item"><button type="button" class="lx-tabs__tab" role="tab" id="tab-log" aria-selected="false">Build log</button></li>
+        <ul class="lx-tabs" role="tablist" id="right-tabs">
+          <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="preview" aria-selected="true">Preview</button></li>
+          <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="versions" aria-selected="false">Versions</button></li>
+          <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="jobmatch" aria-selected="false">Job match</button></li>
+          <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="atstext" aria-selected="false">ATS text</button></li>
+          <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="log" aria-selected="false">Log</button></li>
         </ul>
-        <span class="lx-card__caption lx-card__caption--inline" id="pdf-meta"></span>
-        <div class="lx-zoom" role="group" aria-label="Zoom">
-          <button type="button" class="lx-zoom__btn" id="zoom-out" title="Zoom out">&minus;</button>
-          <button type="button" class="lx-zoom__btn lx-zoom__btn--text" id="zoom-fit" title="Fit width">Fit</button>
-          <button type="button" class="lx-zoom__btn" id="zoom-in" title="Zoom in">+</button>
+      </div>
+      <div class="lx-tabpanel" data-panel="preview">
+        <div class="lx-preview-bar" id="preview-tools">
+          <label class="lx-preview-bar__label" for="second">Show</label>
+          <select class="lx-select lx-select--bar" id="second" title="Show a second document side by side"></select>
+          <span class="lx-preview-meta" id="pdf-meta"></span>
+          <div class="lx-zoom" role="group" aria-label="Zoom">
+            <button type="button" class="lx-zoom__btn" id="zoom-out" title="Zoom out">&minus;</button>
+            <button type="button" class="lx-zoom__btn lx-zoom__btn--text" id="zoom-fit" title="Fit width">Fit</button>
+            <button type="button" class="lx-zoom__btn" id="zoom-in" title="Zoom in">+</button>
+          </div>
+        </div>
+        <div class="lx-errors" id="errors" role="alert" hidden>
+          <h2 class="lx-errors__title" id="errors-title">There is a problem</h2>
+          <ul class="lx-errors__list" id="errors-list"></ul>
+        </div>
+        <div class="lx-previews" id="previews">
+          <div class="lx-card__body lx-pdf" id="pdf">
+            <p class="lx-empty" id="pdf-empty">No PDF yet. Select Recompile or turn on Auto-refresh.</p>
+          </div>
+          <div class="lx-card__body lx-pdf lx-pdf--second" id="pdf2" hidden></div>
         </div>
       </div>
-      <div class="lx-errors" id="errors" role="alert" hidden>
-        <h2 class="lx-errors__title" id="errors-title">There is a problem</h2>
-        <ul class="lx-errors__list" id="errors-list"></ul>
-      </div>
-      <div class="lx-card__body lx-pdf" id="pdf">
-        <p class="lx-empty" id="pdf-empty">No PDF yet. Select Recompile or turn on Auto-refresh.</p>
-      </div>
-      <pre class="lx-card__body lx-log" id="log" hidden></pre>
+      <div class="lx-tabpanel lx-tabpanel--scroll" data-panel="versions" id="versions" hidden></div>
+      <div class="lx-tabpanel lx-tabpanel--scroll" data-panel="jobmatch" id="jobmatch" hidden></div>
+      <div class="lx-tabpanel lx-tabpanel--scroll" data-panel="atstext" id="atstext" hidden></div>
+      <pre class="lx-tabpanel lx-log" data-panel="log" id="log" hidden></pre>
     </section>
   </main>
 </div>
@@ -219,6 +330,22 @@
       <button type="button" class="lx-link" id="picker-cancel">Cancel</button>
     </div>
   </div>
+</div>
+
+<div class="lx-modal" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" hidden>
+  <form class="lx-modal__box lx-modal__box--small" id="dialog-form">
+    <h2 class="lx-modal__title" id="dialog-title"></h2>
+    <p class="lx-hint" id="dialog-message"></p>
+    <div class="lx-form-group" id="dialog-field">
+      <label class="lx-label" for="dialog-input" id="dialog-label"></label>
+      <span class="lx-hint" id="dialog-hint"></span>
+      <input class="lx-input lx-input--full" id="dialog-input" autocomplete="off">
+    </div>
+    <div class="lx-modal__actions">
+      <button type="submit" class="lx-button" id="dialog-ok">Continue</button>
+      <button type="button" class="lx-link" id="dialog-cancel">Cancel</button>
+    </div>
+  </form>
 </div>
 
 <script type="module" src="/build/main.js"></script>

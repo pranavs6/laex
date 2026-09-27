@@ -1,0 +1,17 @@
+{
+  "name": "laex-desktop",
+  "productName": "LAEX",
+  "version": "0.1.0",
+  "private": true,
+  "description": "laex as a desktop app",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "package": "node package.cjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/packager": "^18.4.4",
+    "electron": "^41.7.1"
+  }
+}
