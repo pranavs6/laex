@@ -693,6 +693,7 @@ async function boot() {
     auto: store.get("auto", true),
     interval: store.get("interval", 1),
     invert: store.get("invert", false),
+    swipe: globalStore.get("swipe", "zoom"),
     files: store.get("files", true),
     editorSize: store.get("editor-size", 14),
     termSize: store.get("term-size", Math.round(project.kitty.font_size) || 13),
@@ -724,6 +725,7 @@ async function boot() {
     },
   });
   $("pdf").classList.toggle("is-inverted", settings.invert);
+  pdf.swipe = settings.swipe;
 
   term = new Term($("terminal"), project.kitty, {
     fontSize: settings.termSize,
@@ -736,6 +738,7 @@ async function boot() {
   $("auto").checked = settings.auto;
   $("interval").value = settings.interval;
   $("invert").checked = settings.invert;
+  $("swipe").value = settings.swipe;
   $("editor-size").value = settings.editorSize;
   $("term-size").value = settings.termSize;
   $("claude-prompt").checked = settings.claudePrompt;
@@ -754,6 +757,9 @@ async function boot() {
   $("interval").addEventListener("change", (e) => {
     settings.interval = Math.min(30, Math.max(0.5, Number(e.target.value) || 1));
     e.target.value = settings.interval; store.set("interval", settings.interval); restartTick();
+  });
+  $("swipe").addEventListener("change", (e) => {
+    settings.swipe = e.target.value; globalStore.set("swipe", settings.swipe); pdf.swipe = settings.swipe;
   });
   $("invert").addEventListener("change", (e) => {
     settings.invert = e.target.checked; store.set("invert", settings.invert);

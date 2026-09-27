@@ -21,6 +21,70 @@ export class PdfView {
         this.resizeTimer = setTimeout(() => this.render(), 120);
       }
     }).observe(this.el);
+    this.swipe = "zoom";
+    this.el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
+    this.enablePan();
+  }
+
+  // Zoom gestures. Trackpad pinch arrives as a wheel event with ctrlKey set.
+  // With `swipe` set to "zoom", a plain vertical two-finger swipe zooms too
+  // (fingers up = out, down = in); Cmd+swipe and click-drag still move the
+  // page. Pages are scaled with CSS at once, anchored under the pointer, and
+  // re-rendered crisply once the gesture settles.
+  onWheel(e) {
+    if (!this.doc) return;
+    const pinch = e.ctrlKey;
+    const swipe = this.swipe === "zoom" && !e.metaKey && Math.abs(e.deltaY) > Math.abs(e.deltaX);
+    if (!pinch && !swipe) return;
+    e.preventDefault();
+    const delta = Math.max(-60, Math.min(60, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY));
+    this.zoomBy(Math.exp(-delta * (pinch ? 0.01 : 0.0012)), e.clientX, e.clientY);
+  }
+
+  zoomBy(factor, clientX, clientY) {
+    const wrap = this.el.querySelector(".lx-pdf__pages");
+    const rendered = this.currentScale();
+    const prev = this.liveScale ?? rendered;
+    const target = Math.min(4, Math.max(0.3, prev * factor));
+    if (target === prev) return;
+    this.liveScale = target;
+
+    const box = this.el.getBoundingClientRect();
+    const px = clientX - box.left;
+    const py = clientY - box.top;
+    const r = target / prev;
+    const x = (this.el.scrollLeft + px) * r - px;
+    const y = (this.el.scrollTop + py) * r - py;
+    if (wrap) wrap.style.zoom = String(target / rendered);
+    this.el.scrollLeft = x;
+    this.el.scrollTop = y;
+
+    clearTimeout(this.pinchTimer);
+    this.pinchTimer = setTimeout(() => {
+      this.liveScale = null;
+      this.setZoom(target);
+    }, 180);
+  }
+
+  // Click-and-drag pans, since the swipe is busy zooming. A small threshold
+  // keeps clicks on links and double-click-to-source working.
+  enablePan() {
+    let start = null;
+    this.el.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest(".lx-pdf__link")) return;
+      start = { x: e.clientX, y: e.clientY, left: this.el.scrollLeft, top: this.el.scrollTop, id: e.pointerId, moved: false };
+    });
+    this.el.addEventListener("pointermove", (e) => {
+      if (!start || e.pointerId !== start.id) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!start.moved && Math.hypot(dx, dy) < 5) return;
+      if (!start.moved) { start.moved = true; this.el.setPointerCapture(e.pointerId); this.el.classList.add("is-panning"); }
+      this.el.scrollLeft = start.left - dx;
+      this.el.scrollTop = start.top - dy;
+    });
+    const end = () => { start = null; this.el.classList.remove("is-panning"); };
+    this.el.addEventListener("pointerup", end);
+    this.el.addEventListener("pointercancel", end);
   }
 
   async load(url) {

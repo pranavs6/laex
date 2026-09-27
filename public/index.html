@@ -69,6 +69,14 @@
         <span class="lx-hint">Seconds between save-and-rebuild checks</span>
         <input class="lx-input lx-input--short" id="interval" type="number" min="0.5" max="30" step="0.5">
       </div>
+      <div class="lx-form-group">
+        <label class="lx-label" for="swipe">Two-finger swipe on the preview</label>
+        <span class="lx-hint">Pinch always zooms. Drag or Cmd+swipe to move the page.</span>
+        <select class="lx-select" id="swipe">
+          <option value="zoom">Zooms (up out, down in)</option>
+          <option value="scroll">Scrolls</option>
+        </select>
+      </div>
       <div class="lx-form-group lx-form-group--row">
         <div>
           <label class="lx-label" for="editor-size">Editor size</label>

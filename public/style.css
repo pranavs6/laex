@@ -250,7 +250,8 @@ body.is-dragging .lx-term, body.is-dragging .lx-pdf { pointer-events: none; }
 .lx-zoom__btn[aria-pressed="true"]:hover { background: #dbdad9; }
 .lx-zoom__btn:focus-visible { background: var(--yellow); color: var(--black); outline: 3px solid transparent; position: relative; }
 
-.lx-pdf { overflow: auto; background: #1a1d1f; }
+.lx-pdf { overflow: auto; background: #1a1d1f; cursor: grab; }
+.lx-pdf.is-panning { cursor: grabbing; user-select: none; }
 .lx-pdf__pages { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px; min-width: min-content; }
 .lx-pdf__page { position: relative; background: #fff; box-shadow: 0 0 0 1px var(--border), 0 6px 18px rgba(0,0,0,.55); }
 .lx-pdf__page canvas { display: block; }
