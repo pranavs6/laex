@@ -26,6 +26,7 @@ export class PdfView {
     this.swipe = "zoom";
     this.el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
     this.enablePan();
+    this.enableTouch();
   }
 
   // Zoom gestures. Trackpad pinch arrives as a wheel event with ctrlKey set.
@@ -73,7 +74,7 @@ export class PdfView {
   enablePan() {
     let start = null;
     this.el.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || e.target.closest(".lx-pdf__link")) return;
+      if (e.pointerType === "touch" || e.button !== 0 || e.target.closest(".lx-pdf__link")) return;
       start = { x: e.clientX, y: e.clientY, left: this.el.scrollLeft, top: this.el.scrollTop, id: e.pointerId, moved: false };
     });
     this.el.addEventListener("pointermove", (e) => {
@@ -87,6 +88,58 @@ export class PdfView {
     const end = () => { start = null; this.el.classList.remove("is-panning"); };
     this.el.addEventListener("pointerup", end);
     this.el.addEventListener("pointercancel", end);
+  }
+
+  // Touch: one finger scrolls natively, two fingers pinch through the same
+  // path as the trackpad, and a double tap jumps to the source.
+  enableTouch() {
+    const pts = new Map();
+    let spread = 0, down = null, lastTap = null;
+    const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    this.el.addEventListener("gesturestart", (e) => e.preventDefault());
+    this.el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch") return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      down = pts.size === 1 ? { x: e.clientX, y: e.clientY, t: e.timeStamp } : null;
+      if (pts.size === 2) spread = dist();
+    });
+    this.el.addEventListener("pointermove", (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size !== 2 || !this.doc) return;
+      const d = dist();
+      const [a, b] = [...pts.values()];
+      if (spread) this.zoomBy(d / spread, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      spread = d;
+    });
+    this.el.addEventListener("pointerup", (e) => {
+      if (!pts.delete(e.pointerId)) return;
+      spread = 0;
+      if (pts.size || !down || e.timeStamp - down.t > 300 || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) return;
+      const box = e.target.closest?.(".lx-pdf__page");
+      if (box && !e.target.closest(".lx-pdf__link") && lastTap && e.timeStamp - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
+        lastTap = null;
+        this.touchSyncAt = Date.now();
+        this.syncAt(box, e.clientX, e.clientY);
+      } else {
+        lastTap = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+      }
+    });
+    this.el.addEventListener("pointercancel", (e) => { pts.delete(e.pointerId); spread = 0; down = null; });
+  }
+
+  // Reverse SyncTeX from a point on a page, with a flash where it landed.
+  syncAt(box, clientX, clientY) {
+    const n = Number(box.dataset.page);
+    const scale = this.pageScale[n - 1];
+    if (!scale) return;
+    const r = box.querySelector("canvas").getBoundingClientRect();
+    this.onReverseSync(n, (clientX - r.left) / scale, (clientY - r.top) / scale);
+    const flash = document.createElement("div");
+    flash.className = "lx-pdf__flash";
+    flash.style.top = `${clientY - r.top - 9}px`;
+    box.appendChild(flash);
+    setTimeout(() => flash.remove(), 1300);
   }
 
   async load(url) {
@@ -206,13 +259,8 @@ export class PdfView {
       box.dataset.page = String(n);
       box.appendChild(canvas);
       box.addEventListener("dblclick", (e) => {
-        const r = canvas.getBoundingClientRect();
-        this.onReverseSync(n, (e.clientX - r.left) / scale, (e.clientY - r.top) / scale);
-        const flash = document.createElement("div");
-        flash.className = "lx-pdf__flash";
-        flash.style.top = `${e.clientY - r.top - 9}px`;
-        box.appendChild(flash);
-        setTimeout(() => flash.remove(), 1300);
+        if (Date.now() - (this.touchSyncAt || 0) < 600) return; // already handled as a double tap
+        this.syncAt(box, e.clientX, e.clientY);
       });
       await this.addLinks(page, vp, box);
       wrap.appendChild(box);

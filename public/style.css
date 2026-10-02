@@ -659,3 +659,107 @@ body.is-dragging .lx-term, body.is-dragging .lx-pdf { pointer-events: none; }
 .lx-chip--shown { background: #bbd4ea; color: #0c2d4a; cursor: pointer; }
 .lx-chip--shown:hover { text-decoration: underline; }
 .lx-chip__via { font-size: .8125rem; opacity: .8; }
+
+/* ============================================================== touch + phone */
+.lx-pdf { touch-action: pan-x pan-y; }
+.lx-panes, .lx-termkeys { display: none; }
+.lx-termkeys {
+  gap: 6px; flex: none; overflow-x: auto; padding: 6px 8px; scrollbar-width: none;
+  background: var(--card-head); border-bottom: 1px solid var(--border);
+}
+.lx-termkeys button {
+  flex: none; min-width: 44px; height: 36px; padding: 0 10px; border: 2px solid var(--text);
+  background: transparent; color: var(--text); font: 1rem var(--font); cursor: pointer; touch-action: manipulation;
+}
+.lx-termkeys button:active { background: var(--pressed-bg); color: var(--pressed-text); }
+
+/* No hover on touch screens: keep row actions and tags visible. */
+@media (hover: none) {
+  .lx-row__actions { display: flex; gap: 14px; }
+  .lx-row:hover .lx-tag, .lx-row:focus-within .lx-tag { display: inline-block; }
+  .lx-row__actions .lx-link { font-size: .9375rem; padding: 8px 0; }
+  .lx-termkeys { display: flex; }
+}
+
+@media (max-width: 760px) {
+  :root { --gap: 8px; }
+  html, body { height: var(--vvh, 100dvh); }
+  body { display: flex; flex-direction: column; }
+  .lx-wide { display: none; }
+
+  .lx-header { flex: none; padding-left: max(12px, env(safe-area-inset-left)); }
+  .lx-header__left { gap: 14px; }
+  .lx-brand { font-size: 1.25rem; gap: 8px; }
+  .lx-brand__mark { width: 16px; height: 19px; background-size: 5px 100%, 100% 5px, 7px 5px; }
+  .lx-breadcrumbs { font-size: 1rem; }
+  .lx-breadcrumbs__link { overflow: hidden; text-overflow: ellipsis; }
+  .lx-breadcrumbs__sep, .lx-breadcrumbs__current { display: none; }
+  .lx-header__menu { padding: 0 max(12px, env(safe-area-inset-right)) 0 12px; font-size: 1rem; }
+
+  .lx-phase { flex: none; height: auto; flex-wrap: wrap; gap: 6px 12px; margin: 0 8px; padding: 6px 0; }
+  .lx-phase__content { flex: 1 1 100%; gap: 8px; }
+  .lx-phase__text { font-size: .875rem; }
+  .lx-phase__actions { flex: 1 1 100%; gap: 10px; justify-content: space-between; }
+  .lx-phase__actions .lx-button { padding: 6px 10px 5px; }
+  .lx-footer { display: none; }
+
+  /* One pane at a time. The others stay laid out at full size but invisible,
+     so the terminal and PDF keep real dimensions to render into. */
+  .lx-app { position: relative; flex: 1; height: auto; min-height: 0; padding: 8px; gap: 0; }
+  .lx-work, .lx-left { display: contents; }
+  .lx-gutter, .lx-files-rail, #collapse-files { display: none !important; }
+  .lx-files, #editor-pane, #term-pane, #pdf-pane { position: absolute; inset: 8px; width: auto; visibility: hidden; }
+  .lx-app[data-pane="files"] .lx-files,
+  .lx-app[data-pane="editor"] #editor-pane,
+  .lx-app[data-pane="terminal"] #term-pane,
+  .lx-app[data-pane="preview"] #pdf-pane { position: static; flex: 1; visibility: visible; }
+
+  .lx-panes {
+    display: flex; flex: none; border-top: 1px solid var(--border); background: var(--card-head);
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .lx-panes button {
+    flex: 1; height: 52px; border: 0; background: transparent; cursor: pointer; touch-action: manipulation;
+    color: var(--link); font: 1rem var(--font); text-decoration: underline; text-underline-offset: .15em;
+  }
+  .lx-panes button[aria-selected="true"] {
+    color: var(--text); background: var(--card); font-weight: 700; text-decoration: none; box-shadow: inset 0 4px 0 var(--blue);
+  }
+  .lx-panes button:focus-visible { background: var(--yellow); color: var(--black); outline: 3px solid transparent; text-decoration: none; }
+  /* With the keyboard up, give the room to the pane being typed into. */
+  body.is-keyboard .lx-panes, body.is-keyboard .lx-phase { display: none; }
+
+  /* Cards */
+  .lx-card__head { min-height: 44px; padding: 6px 10px; gap: 10px; }
+  .lx-card__head--tabs { padding: 0 8px 0 0; }
+  .lx-card__title { font-size: 1rem; }
+  .lx-card__actions li + li { margin-left: 8px; padding-left: 8px; }
+  .lx-tabs { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .lx-tabs__tab, .lx-card--preview .lx-tabs__tab, .lx-tabs--side .lx-tabs__tab { padding: 0 12px; white-space: nowrap; }
+  .lx-row { min-height: 44px; }
+  .lx-preview-bar { padding: 6px 8px; gap: 8px; }
+  .lx-select--bar { max-width: 130px; font-size: 16px; }
+  .lx-zoom__btn { min-width: 40px; height: 36px; }
+  .lx-errors { margin: 8px 8px 0; padding: 10px 12px; }
+  .lx-errors__title { font-size: 1.1875rem; }
+  .lx-term { padding: 4px 0 0 4px; }
+  .lx-dropdown__menu { width: min(320px, calc(100vw - 40px)); }
+  .lx-panel { padding: 15px 12px 25px; }
+  .lx-banner { padding: 8px 10px; gap: 8px 12px; }
+
+  /* Settings fill the screen and scroll */
+  .lx-menu {
+    position: fixed; top: var(--header-h); bottom: 0; overflow: auto; overscroll-behavior: contain;
+    padding: 20px 15px calc(30px + env(safe-area-inset-bottom));
+  }
+  .lx-menu__grid { grid-template-columns: 1fr; gap: 24px; }
+  .lx-select, .lx-input { min-width: 0; width: 100%; }
+  .lx-input--short { width: 90px; }
+  .lx-select--bar { width: auto; }
+  .lx-checkbox__label { white-space: normal; }
+
+  /* Dialogs */
+  .lx-modal { padding-top: 8px; }
+  .lx-modal__box { width: calc(100vw - 16px); max-height: calc(var(--vvh, 100dvh) - 16px); overflow: auto; padding: 18px 16px; }
+  .lx-modal__title { font-size: 1.5rem; }
+}

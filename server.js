@@ -17,11 +17,15 @@ import pty from "node-pty";
 import { createVersions } from "./lib/versions.js";
 import { search, replace } from "./lib/search.js";
 
+const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
+// Optional .env next to this file (LAEX_PORT, LAEX_HOSTS). Variables already
+// set in the shell win.
+try { process.loadEnvFile(path.join(APP_DIR, ".env")); } catch {}
+
 const args = process.argv.slice(2);
 const OPEN = args.includes("--open");
 const HOST = "127.0.0.1";
 const BASE_PORT = Number(process.env.LAEX_PORT) || 4777;
-const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(APP_DIR, "public");
 const SHIM_DIR = path.join(APP_DIR, "shim");
 const HOME = os.homedir();
@@ -64,7 +68,9 @@ const err = (status, message) => Object.assign(new Error(message), { status });
 // A shell over a WebSocket is remote code execution for whoever can reach it.
 // Loopback-only bind stops the network; the Host check stops DNS rebinding;
 // the Origin check stops any other site open in the browser from connecting.
-const allowedHosts = () => new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+// LAEX_HOSTS adds tunnel hostnames, comma-separated (e.g. abcd.ngrok-free.app).
+const extraHosts = (process.env.LAEX_HOSTS || "").split(",").map((h) => h.trim()).filter(Boolean);
+const allowedHosts = () => new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, ...extraHosts]);
 const hostOk = (req) => allowedHosts().has(req.headers.host);
 function originOk(req) {
   const o = req.headers.origin;

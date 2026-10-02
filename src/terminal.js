@@ -41,7 +41,9 @@ export class Term {
     this.term.loadAddon(unicode);
     this.term.unicode.activeVersion = "11";
     this.term.open(parent);
-    try {
+    // WebGL is flaky on phones (blank at narrow sizes, lost when the tab is
+    // backgrounded); the DOM renderer is plenty fast there.
+    if (!matchMedia("(pointer: coarse)").matches) try {
       const gl = new WebglAddon();
       gl.onContextLoss(() => gl.dispose());
       this.term.loadAddon(gl);
@@ -63,7 +65,7 @@ export class Term {
   }
 
   connect() {
-    this.ws = new WebSocket(`ws://${location.host}/ws/pty`);
+    this.ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/pty`);
     this.ws.onopen = () => {
       this.onStatus("connected");
       this.term.reset();
@@ -91,6 +93,17 @@ export class Term {
   setFontSize(px) {
     this.term.options.fontSize = px;
     this.resize(true);
+  }
+
+  // Keys a phone keyboard lacks, for the on-screen key row.
+  key(name) {
+    const app = this.term.modes.applicationCursorKeysMode;
+    const arrow = (c) => (app ? `\x1bO${c}` : `\x1b[${c}`);
+    const seq = {
+      esc: "\x1b", tab: "\t", stab: "\x1b[Z", ctrlc: "\x03", enter: "\r", newline: "\x1b\r",
+      up: arrow("A"), down: arrow("B"), right: arrow("C"), left: arrow("D"),
+    }[name];
+    if (seq) this.send({ t: "in", d: seq });
   }
 
   run(cmd) {

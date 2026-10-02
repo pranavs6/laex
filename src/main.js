@@ -230,6 +230,7 @@ async function openFile(path, line, col, len) {
   outline?.refresh();
   scheduleSpell(0);
   if (line) editor.goto(line, col, len);
+  showPane("editor");
 }
 
 async function saveAll() {
@@ -441,7 +442,7 @@ function applyProjectInfo(info) {
 }
 
 function connectEvents() {
-  const ws = new WebSocket(`ws://${location.host}/ws/events`);
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/events`);
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     if (msg.type === "file") onDiskChange(msg.path, msg.content);
@@ -688,14 +689,14 @@ function newEntry(kind) {
   treeError = "";
   setFilesVisible(true);
   showSide("files");
+  showPane("files");
   renderTree();
 }
 
 function setFilesVisible(show) {
   settings.files = show;
   store.set("files", show);
-  $("files").hidden = !show;
-  $("expand-files").hidden = show;
+  applyPhone();
 }
 
 function showSide(name) {
@@ -740,6 +741,7 @@ function showTab(name) {
   for (const b of document.querySelectorAll("#right-tabs [data-tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
   for (const p of document.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== name;
   store.set("tab", name);
+  showPane("preview");
   if (name === "log") loadLog();
   if (name === "versions") versions.refresh();
   if (name === "jobmatch" && !tabsLoaded.has(name)) { tabsLoaded.add(name); jobmatch.load(); }
@@ -866,11 +868,49 @@ function splitter(gutter, axis, cssVar, container, key, dflt) {
   });
 }
 
+// ------------------------------------------------------------- phone panes
+// On a narrow screen one pane fills the window and a bar at the bottom
+// switches between them. Wider screens ignore the pane and show everything.
+const phone = matchMedia("(max-width: 760px)");
+
+function showPane(name) {
+  $("app").dataset.pane = name;
+  for (const b of document.querySelectorAll("#panes [data-pane]")) b.setAttribute("aria-selected", String(b.dataset.pane === name));
+  store.set("pane", name);
+  if (phone.matches && name === "editor") requestAnimationFrame(() => editor.view.requestMeasure());
+}
+
+// The sidebar can be hidden on a wide screen; on a phone it is a pane.
+function applyPhone() {
+  $("files").hidden = phone.matches ? false : !settings.files;
+  $("expand-files").hidden = phone.matches || settings.files;
+  if (!phone.matches) document.body.classList.remove("is-keyboard");
+}
+
+// Size the page to the visible area, so an on-screen keyboard shrinks the
+// app instead of covering the terminal or editor.
+function fitViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  let tallest = 0, width = 0;
+  const fit = () => {
+    if (Math.abs(vv.width - width) > 50) { tallest = 0; width = vv.width; }
+    tallest = Math.max(tallest, vv.height);
+    document.documentElement.style.setProperty("--vvh", `${Math.round(vv.height)}px`);
+    document.body.classList.toggle("is-keyboard", phone.matches && vv.height < tallest * 0.75);
+    if (phone.matches && (window.scrollX || window.scrollY)) window.scrollTo(0, 0);
+  };
+  vv.addEventListener("resize", fit);
+  vv.addEventListener("scroll", fit);
+  fit();
+}
+
 // ------------------------------------------------------------ other actions
 async function showInPdf() {
   const p = editor.path;
   if (!p || !/\.tex$/.test(p) || !settings.main) return;
   showTab("preview");
+  showPane("preview");
   await saveAll();
   if (needsCompile) await compile({ wait: true });
   const c = editor.cursorInfo();
@@ -935,6 +975,7 @@ async function boot() {
   // was edited last.
   store.set("main", settings.main);
   expanded = new Set(store.get("expanded", []));
+  const pane = store.get("pane", "editor");
 
   const root = document.documentElement.style;
   document.documentElement.dataset.theme = settings.theme;
@@ -984,7 +1025,7 @@ async function boot() {
     get pdf() { return pdf; },
     openFile, saveAll, compile, setMain, applyProjectInfo, showTab, findInSource,
     askClaude: (prompt) => claude.send(prompt),
-    focusTerminal: () => term.term.focus(),
+    focusTerminal: () => { showPane("terminal"); term.term.focus(); },
     hasJob: () => jobmatch.hasJob(),
     techWords: () => techWords,
     cvText: async () => checks.text() || api.text(`/api/text?main=${encodeURIComponent(settings.main)}`).catch(() => ""),
@@ -1072,6 +1113,14 @@ async function boot() {
   bind("save-version", () => versions.saveVersion(), "click");
   bind("show-in-pdf", () => showInPdf(), "click");
   bind("start-claude", () => term.run("claude"), "click");
+  for (const b of document.querySelectorAll("#term-keys [data-key]")) {
+    b.addEventListener("mousedown", (e) => e.preventDefault()); // keep the terminal focused and the keyboard up
+    b.addEventListener("click", () => term.key(b.dataset.key));
+  }
+  for (const b of document.querySelectorAll("#panes [data-pane]")) b.addEventListener("click", () => showPane(b.dataset.pane));
+  bind("outline", (e) => { if (e.target.closest("button")) showPane("editor"); }, "click");
+  phone.addEventListener("change", applyPhone);
+  fitViewport();
   bind("restart-shell", () => term.restart(), "click");
   bind("zoom-in", () => pdf.setZoom(Math.min(4, pdf.currentScale() * 1.15)), "click");
   bind("zoom-out", () => pdf.setZoom(Math.max(0.3, pdf.currentScale() / 1.15)), "click");
@@ -1126,6 +1175,7 @@ async function boot() {
     search: () => {
       setFilesVisible(true);
       showSide("search");
+      showPane("files");
       search.focus(editor.path ? editor.cursorInfo().selection.split("\n")[0] : "");
     },
     files: () => setFilesVisible(!settings.files),
@@ -1165,6 +1215,7 @@ async function boot() {
 
   refreshDownload();
   showTab(store.get("tab", "preview"));
+  showPane(pane);
   restartTick();
   if (settings.main) compile();
   versions.refresh();

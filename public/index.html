@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>LAEX</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#1d70b8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/build/main.css">
@@ -38,11 +38,11 @@
   <div class="lx-phase__actions">
     <div class="lx-checkbox lx-checkbox--small">
       <input type="checkbox" id="auto" class="lx-checkbox__input">
-      <label for="auto" class="lx-checkbox__label">Auto-refresh</label>
+      <label for="auto" class="lx-checkbox__label">Auto<span class="lx-wide">-refresh</span></label>
     </div>
     <button type="button" class="lx-button" id="compile">Recompile</button>
-    <button type="button" class="lx-button lx-button--secondary" id="save-version">Save version</button>
-    <a class="lx-button lx-button--secondary" id="download" href="#" download>Download PDF</a>
+    <button type="button" class="lx-button lx-button--secondary" id="save-version">Save<span class="lx-wide">&nbsp;version</span></button>
+    <a class="lx-button lx-button--secondary" id="download" href="#" download>Download<span class="lx-wide">&nbsp;PDF</span></a>
   </div>
 </div>
 
@@ -255,6 +255,18 @@
             <li><button type="button" class="lx-link" id="restart-shell">Restart shell</button></li>
           </ul>
         </div>
+        <div class="lx-termkeys" id="term-keys" aria-label="Terminal keys">
+          <button type="button" data-key="esc">Esc</button>
+          <button type="button" data-key="tab">Tab</button>
+          <button type="button" data-key="stab" title="Shift+Tab">&#8679;Tab</button>
+          <button type="button" data-key="ctrlc">Ctrl&#8209;C</button>
+          <button type="button" data-key="up" aria-label="Up">&uarr;</button>
+          <button type="button" data-key="down" aria-label="Down">&darr;</button>
+          <button type="button" data-key="left" aria-label="Left">&larr;</button>
+          <button type="button" data-key="right" aria-label="Right">&rarr;</button>
+          <button type="button" data-key="newline" title="New line without sending">&#8679;&crarr;</button>
+          <button type="button" data-key="enter">Enter</button>
+        </div>
         <div class="lx-card__body lx-term" id="terminal"></div>
       </div>
     </section>
@@ -305,6 +317,13 @@
   <span id="footer-keys"></span>
   <span class="lx-footer__meta">Built with latexmk <span aria-hidden="true">·</span> Double-click the preview to jump to source</span>
 </footer>
+
+<nav class="lx-panes" id="panes" aria-label="Panes">
+  <button type="button" data-pane="files">Files</button>
+  <button type="button" data-pane="editor">Editor</button>
+  <button type="button" data-pane="terminal">Terminal</button>
+  <button type="button" data-pane="preview">Preview</button>
+</nav>
 
 <div class="lx-modal" id="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" hidden>
   <div class="lx-modal__box">
