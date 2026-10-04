@@ -18,7 +18,8 @@ export class PdfView {
     this.lastWidth = 0;
     new ResizeObserver(() => {
       const w = this.el.clientWidth;
-      if (this.zoom === null && this.doc && Math.abs(w - this.lastWidth) > 4) {
+      // w is 0 while another page is showing; nothing to fit to then.
+      if (w && this.zoom === null && this.doc && Math.abs(w - this.lastWidth) > 4) {
         clearTimeout(this.resizeTimer);
         this.resizeTimer = setTimeout(() => this.render(), 120);
       }

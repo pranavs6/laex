@@ -37,7 +37,6 @@ export function initVersions(app) {
 
   async function refresh() {
     list = await api.json("/api/versions").catch(() => []);
-    app.onVersionCount?.(list.filter((v) => !v.auto).length);
     if (!root.dataset.view || root.dataset.view === "list") renderList();
   }
 
@@ -74,6 +73,12 @@ export function initVersions(app) {
       actions.append(el("li", {}, b));
     };
     act("Compare", () => compare(v));
+    if (v.pdf) {
+      const a = el("a", { className: "lx-link", textContent: "Download PDF", download: `${v.label}.pdf`,
+        href: `/api/versions/pdf?id=${encodeURIComponent(v.id)}&download=1&name=${encodeURIComponent(v.label)}` });
+      a.append(el("span", { className: "lx-visually-hidden", textContent: ` of ${v.label}` }));
+      actions.append(el("li", {}, a));
+    }
     act("Restore", () => confirmRestore(v, row));
     act("Rename", async () => {
       const label = await app.ask({ title: "Rename version", label: "Version name", value: v.label, confirm: "Save name" });
@@ -133,7 +138,6 @@ export function initVersions(app) {
     await app.compile({ wait: true });
     const v = await api.post("/api/versions", { label: label || `Version ${list.filter((x) => !x.auto).length + 1}`, main: app.settings.main });
     await refresh();
-    app.showTab("versions");
     renderList(`Saved "${v.label}".`);
     app.setStatus("Saved", "green", `Version "${v.label}" saved at ${new Date(v.at).toLocaleTimeString("en-GB")}.`);
   }

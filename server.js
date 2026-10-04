@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import pty from "node-pty";
 import { createVersions } from "./lib/versions.js";
+import { createApplications } from "./lib/applications.js";
+import { createNotes } from "./lib/notes.js";
 import { search, replace } from "./lib/search.js";
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -504,6 +506,8 @@ const versions = createVersions({
   listTextFiles: async () => (await listTree()).filter((e) => e.type === "file" && e.text).map((e) => e.path),
   pdfPathFor,
 });
+const applications = createApplications({ getRoot: () => ROOT });
+const notes = createNotes({ getRoot: () => ROOT });
 
 // ------------------------------------------------------------- ask claude
 // "Ask Claude" buttons send a prompt to the terminal. If Claude is already
@@ -550,7 +554,7 @@ function send(res, status, body, type = "application/json") {
   res.end(data);
 }
 
-async function readBody(req, limit = 20 * 1024 * 1024) {
+async function readRaw(req, limit = 20 * 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const c of req) {
@@ -558,8 +562,9 @@ async function readBody(req, limit = 20 * 1024 * 1024) {
     if (size > limit) throw err(413, "body too large");
     chunks.push(c);
   }
-  return Buffer.concat(chunks).toString("utf8");
+  return Buffer.concat(chunks);
 }
+const readBody = async (req, limit) => (await readRaw(req, limit)).toString("utf8");
 const readJson = async (req) => JSON.parse(await readBody(req));
 
 async function handle(req, res) {
@@ -668,7 +673,9 @@ async function handle(req, res) {
     case "GET /api/versions/pdf": {
       const data = await fsp.readFile(versions.pdfOf(q.id)).catch(() => null);
       if (!data) return send(res, 404, { error: "no pdf in this version" });
-      res.writeHead(200, { "Content-Type": "application/pdf", "Cache-Control": "no-store" });
+      const headers = { "Content-Type": "application/pdf", "Cache-Control": "no-store" };
+      if (q.download) headers["Content-Disposition"] = `attachment; filename="${safeName(q.name) || "version"}.pdf"`;
+      res.writeHead(200, headers);
       return res.end(data);
     }
     case "POST /api/versions/restore": {
@@ -679,6 +686,34 @@ async function handle(req, res) {
       const b = await readJson(req);
       return send(res, 200, await versions.rename(b.id, b.label));
     }
+    // Application tracker
+    case "GET /api/applications":
+      return send(res, 200, await applications.list());
+    case "POST /api/applications":
+      return send(res, 200, await applications.save(await readJson(req)));
+    case "PUT /api/applications/pdf":
+      return send(res, 200, await applications.attachPdf(q.id, await readRaw(req), q.name));
+    case "GET /api/applications/pdf": {
+      const data = await fsp.readFile(applications.pdfPath(q.id)).catch(() => null);
+      if (!data) return send(res, 404, { error: "no CV uploaded for this application" });
+      const headers = { "Content-Type": "application/pdf", "Cache-Control": "no-store" };
+      if (q.download) headers["Content-Disposition"] = `attachment; filename="${safeName(q.name) || "CV"}.pdf"`;
+      res.writeHead(200, headers);
+      return res.end(data);
+    }
+    case "POST /api/applications/delete":
+      await applications.remove((await readJson(req)).id);
+      return send(res, 200, { ok: true });
+
+    // Notes
+    case "GET /api/notes":
+      return send(res, 200, await notes.list());
+    case "POST /api/notes":
+      return send(res, 200, await notes.save(await readJson(req)));
+    case "POST /api/notes/delete":
+      await notes.remove((await readJson(req)).id);
+      return send(res, 200, { ok: true });
+
     case "POST /api/versions/delete":
       await versions.remove((await readJson(req)).id);
       return send(res, 200, { ok: true });

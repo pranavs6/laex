@@ -22,12 +22,22 @@
       <span class="lx-breadcrumbs__current" id="main-name"></span>
     </nav>
   </div>
-  <button type="button" class="lx-header__menu" id="menu-toggle" aria-controls="settings" aria-expanded="false">
+  <button type="button" class="lx-header__menu" id="menu-toggle" aria-controls="menu" aria-expanded="false">
     <svg class="lx-header__chev" width="16" height="10" viewBox="0 0 16 10" fill="none" aria-hidden="true">
       <path d="M1.5 1.5 8 8l6.5-6.5" stroke="currentColor" stroke-width="2.5"/>
-    </svg>Settings
+    </svg>Menu
   </button>
 </header>
+
+<nav class="lx-nav" id="menu" aria-label="Pages" hidden>
+  <ul class="lx-nav__list">
+    <li><a class="lx-nav__link" href="#/resume" data-page="resume"><span class="lx-nav__label">Resume</span><span class="lx-nav__hint">Editor, terminal and preview</span></a></li>
+    <li><a class="lx-nav__link" href="#/files" data-page="files"><span class="lx-nav__label">Files and versions</span><span class="lx-nav__hint">Project files and saved versions</span></a></li>
+    <li><a class="lx-nav__link" href="#/applications" data-page="applications"><span class="lx-nav__label" id="nav-applications">Applications</span><span class="lx-nav__hint">Where you applied and how each one stands</span></a></li>
+    <li><a class="lx-nav__link" href="#/notes" data-page="notes"><span class="lx-nav__label">Notes</span><span class="lx-nav__hint">Interview prep, calls and ideas</span></a></li>
+    <li><a class="lx-nav__link" href="#/settings" data-page="settings"><span class="lx-nav__label">Settings</span><span class="lx-nav__hint">Document, download, editor and Claude</span></a></li>
+  </ul>
+</nav>
 
 <div class="lx-phase">
   <p class="lx-phase__content">
@@ -46,7 +56,9 @@
   </div>
 </div>
 
-<nav class="lx-menu" id="settings" aria-label="Settings" hidden>
+<section class="lx-page lx-settings" data-page="settings" hidden>
+  <div class="lx-page__inner">
+  <h1 class="lx-page__title">Settings</h1>
   <div class="lx-menu__grid">
     <div>
       <h2 class="lx-menu__heading">Document</h2>
@@ -161,7 +173,8 @@
       <button type="button" class="lx-link" id="reset-shortcuts">Reset shortcuts</button>
     </div>
   </div>
-</nav>
+  </div>
+</section>
 
 <div class="lx-app" id="app">
   <aside class="lx-card lx-files" id="files" aria-label="Sidebar">
@@ -277,7 +290,6 @@
       <div class="lx-card__head lx-card__head--tabs">
         <ul class="lx-tabs" role="tablist" id="right-tabs">
           <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="preview" aria-selected="true">Preview</button></li>
-          <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="versions" aria-selected="false">Versions</button></li>
           <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="jobmatch" aria-selected="false">Job match</button></li>
           <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="atstext" aria-selected="false">ATS text</button></li>
           <li><button type="button" class="lx-tabs__tab" role="tab" data-tab="log" aria-selected="false">Log</button></li>
@@ -305,13 +317,31 @@
           <div class="lx-card__body lx-pdf lx-pdf--second" id="pdf2" hidden></div>
         </div>
       </div>
-      <div class="lx-tabpanel lx-tabpanel--scroll" data-panel="versions" id="versions" hidden></div>
       <div class="lx-tabpanel lx-tabpanel--scroll" data-panel="jobmatch" id="jobmatch" hidden></div>
       <div class="lx-tabpanel lx-tabpanel--scroll" data-panel="atstext" id="atstext" hidden></div>
       <pre class="lx-tabpanel lx-log" data-panel="log" id="log" hidden></pre>
     </section>
   </main>
 </div>
+
+<section class="lx-page" data-page="files" hidden>
+  <div class="lx-page__inner lx-page__split">
+    <div class="lx-page__col lx-page__col--files">
+      <h1 class="lx-page__title">Files</h1>
+      <p class="lx-hint">Select a file to open it in the editor.</p>
+      <div class="lx-card lx-filecard" id="files-home"></div>
+    </div>
+    <div class="lx-page__col" id="versions"></div>
+  </div>
+</section>
+
+<section class="lx-page" data-page="applications" hidden>
+  <div class="lx-page__inner lx-page__inner--narrow" id="applications"></div>
+</section>
+
+<section class="lx-page" data-page="notes" hidden>
+  <div class="lx-page__inner" id="notes"></div>
+</section>
 
 <footer class="lx-footer">
   <span id="footer-keys"></span>

@@ -3,6 +3,8 @@ import { Term } from "./terminal.js";
 import { PdfView } from "./pdf.js";
 import { Spell } from "./spell.js";
 import { initVersions } from "./versions.js";
+import { initApplications } from "./applications.js";
+import { initNotes } from "./notes.js";
 import { initJobMatch } from "./jobmatch.js";
 import { initChecks } from "./checks.js";
 import { initOutline } from "./outline.js";
@@ -180,7 +182,7 @@ function ask({ title, message = "", label = "", hint = "", value = "", confirm =
 }
 
 // -------------------------------------------------------------------- state
-let editor, term, pdf, pdf2, spell, versions, jobmatch, checks, outline, search, claude;
+let editor, term, pdf, pdf2, spell, versions, applications, notes, jobmatch, checks, outline, search, claude;
 let settings;
 let needsCompile = false;
 let compiling = false;
@@ -209,7 +211,7 @@ function updateDirty() {
   if (dirtyKey !== lastDirty) { lastDirty = dirtyKey; renderTree(); }
   $("dirty").textContent = !editor.path ? "" : d ? "Unsaved changes" : "Saved";
   $("current-file").textContent = editor.path ? label(editor.path) : "No file open";
-  document.title = `${d ? "• " : ""}${editor.path ? label(editor.path) : project.name} - LAEX`;
+  if (page === "resume") document.title = `${d ? "• " : ""}${editor.path ? label(editor.path) : project.name} - LAEX`;
   showReview();
   postState();
 }
@@ -231,6 +233,7 @@ async function openFile(path, line, col, len) {
   scheduleSpell(0);
   if (line) editor.goto(line, col, len);
   showPane("editor");
+  go("resume");
 }
 
 async function saveAll() {
@@ -361,10 +364,14 @@ function detectName() {
   return (m?.[1] || "").replace(/\\[A-Za-z]+/g, "").trim();
 }
 
+const NOT_COMPANY = /^(main|cv|resume|final|draft|new|old|latest|current|copy|template|short|long|full|v?\d+)$/i;
+
 function fileName() {
   if (!settings.main) return "";
   const base = settings.main.split("/").pop().replace(/\.tex$/, "");
-  const company = base.includes("_") ? base.split("_").pop().replace(/^\w/, (c) => c.toUpperCase()) : "";
+  // cv_monzo.tex names Monzo; ps_main.tex or cv_final.tex name no one.
+  const suffix = base.includes("_") ? base.split("_").pop() : "";
+  const company = suffix && !NOT_COMPANY.test(suffix) ? suffix.replace(/^\w/, (c) => c.toUpperCase()) : "";
   const vars = { name: settings.yourName || detectName(), company, main: base, date: new Date().toISOString().slice(0, 10) };
   const out = settings.filePattern.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "")
     .replace(/\s+/g, " ").replace(/([_-])\1+/g, "$1").replace(/^[\s_-]+|[\s_-]+$/g, "").replace(/\s+([_-])/g, "$1");
@@ -709,7 +716,7 @@ function showSide(name) {
 }
 
 function showMainName() {
-  $("main-name").textContent = settings.main || "No document";
+  $("main-name").textContent = page === "resume" ? settings.main || "No document" : PAGES[page];
 }
 
 function setMain(path) {
@@ -738,12 +745,12 @@ function fillSecond() {
 // ----------------------------------------------------------- right tabs
 let tabsLoaded = new Set();
 function showTab(name) {
+  if (!document.querySelector(`#right-tabs [data-tab="${name}"]`)) name = "preview";
   for (const b of document.querySelectorAll("#right-tabs [data-tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === name));
   for (const p of document.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== name;
   store.set("tab", name);
   showPane("preview");
   if (name === "log") loadLog();
-  if (name === "versions") versions.refresh();
   if (name === "jobmatch" && !tabsLoaded.has(name)) { tabsLoaded.add(name); jobmatch.load(); }
 }
 
@@ -866,6 +873,52 @@ function splitter(gutter, axis, cssVar, container, key, dflt) {
     document.documentElement.style.setProperty(cssVar, `${dflt}%`);
     store.set(key, dflt);
   });
+}
+
+// ------------------------------------------------------------------- pages
+// The Menu switches between whole pages; the address (#/notes) says which,
+// so reload and Back work. Resume is the editor, terminal and preview.
+const PAGES = { resume: "Resume", files: "Files and versions", applications: "Applications", notes: "Notes", settings: "Settings" };
+let page = "resume";
+let booted = false;
+const pageFromHash = () => { const p = location.hash.replace(/^#\/?/, ""); return PAGES[p] ? p : "resume"; };
+
+// Navigate to a page from code, e.g. opening a file from the Files page.
+function go(name) {
+  if (booted && name !== page) location.hash = `#/${name}`;
+}
+
+function renderPage() {
+  const prev = page;
+  page = pageFromHash();
+  if (prev === "notes" && page !== "notes") notes.flush();
+  document.body.dataset.page = page;
+  for (const s of document.querySelectorAll(".lx-page")) s.hidden = s.dataset.page !== page;
+  for (const a of document.querySelectorAll("#menu [data-page]")) {
+    if (a.dataset.page === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  // One file tree: in the sidebar, or on the Files page while that shows.
+  const tree = $("pane-files");
+  if (page === "files") {
+    $("files-home").append(tree);
+    tree.hidden = false;
+  } else if (tree.parentElement !== $("files")) {
+    $("files").insertBefore(tree, $("pane-outline"));
+    showSide(store.get("side", "files"));
+  }
+  if (page === "files") versions.refresh();
+  if (page === "applications") applications.refresh();
+  if (page === "notes") notes.refresh();
+  if (page === "resume") updateDirty();
+  else document.title = `${PAGES[page]} - LAEX`;
+  showMainName();
+  setMenu(false);
+  if (page !== prev) for (const s of document.querySelectorAll(".lx-page")) s.scrollTop = 0;
+}
+
+function setMenu(open) {
+  $("menu-toggle").setAttribute("aria-expanded", String(open));
+  $("menu").hidden = !open;
 }
 
 // ------------------------------------------------------------- phone panes
@@ -1031,10 +1084,17 @@ async function boot() {
     cvText: async () => checks.text() || api.text(`/api/text?main=${encodeURIComponent(settings.main)}`).catch(() => ""),
     spellingCount: () => spellCounts.get(settings.main) || 0,
     onChecks: renderCheckTags,
-    onVersionCount: (n) => { document.querySelector('[data-tab="versions"]').textContent = n ? `Versions (${n})` : "Versions"; },
+    onApplicationCount: (n, due) => {
+      $("nav-applications").textContent = n ? `Applications (${n})` : "Applications";
+      $("nav-applications").classList.toggle("lx-due", due > 0);
+      $("menu-toggle").classList.toggle("lx-due", due > 0);
+      $("menu-toggle").title = due ? `${due} application${due > 1 ? "s" : ""} to follow up` : "";
+    },
     onReplaced: (file, text) => { if (editor.has(file)) { editor.applyExternal(file, text); needsCompile = true; } },
   };
   versions = initVersions(app);
+  applications = initApplications(app);
+  notes = initNotes(app);
   jobmatch = initJobMatch(app);
   checks = initChecks(app);
   outline = initOutline(app);
@@ -1093,8 +1153,8 @@ async function boot() {
   bind("file-pattern", (e) => { settings.filePattern = e.target.value || "{name} CV {company}"; globalStore.set("file-pattern", settings.filePattern); refreshDownload(); }, "input");
   bind("spell-on", (e) => { settings.spellOn = e.target.checked; globalStore.set("spell-on", settings.spellOn); initSpell(); });
   bind("spell-lang", (e) => { settings.spellLang = e.target.value; globalStore.set("spell-lang", settings.spellLang); initSpell(); });
-  bind("edit-dict", () => { setMenu(false); openFile("@dictionary"); }, "click");
-  bind("edit-prompt", () => { setMenu(false); openFile("@prompt"); }, "click");
+  bind("edit-dict", () => openFile("@dictionary"), "click");
+  bind("edit-prompt", () => openFile("@prompt"), "click");
   bind("reset-prompt", async () => {
     await api.post("/api/prompt/reset", {});
     const text = await api.read("@prompt");
@@ -1154,14 +1214,16 @@ async function boot() {
   bind("picker-cancel", closePicker, "click");
   bind("picker", (e) => { if (e.target === $("picker")) closePicker(); }, "pointerdown");
 
-  // Settings menu
+  // Menu
   const menuBtn = $("menu-toggle");
-  const menu = $("settings");
-  function setMenu(open) { menuBtn.setAttribute("aria-expanded", String(open)); menu.hidden = !open; }
+  const menu = $("menu");
   menuBtn.addEventListener("click", () => setMenu(menu.hidden));
+  menu.addEventListener("click", (e) => { if (e.target.closest("a")) setMenu(false); });
   document.addEventListener("pointerdown", (e) => {
     if (!menu.hidden && !menu.contains(e.target) && !menuBtn.contains(e.target)) setMenu(false);
   });
+  window.addEventListener("hashchange", renderPage);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) notes.flush(); });
 
   // Global shortcuts, in the capture phase so they work from the editor and
   // the terminal alike and win over CodeMirror's own bindings.
@@ -1173,6 +1235,7 @@ async function boot() {
     askClaude: () => claude.open(),
     showInPdf,
     search: () => {
+      go("resume");
       setFilesVisible(true);
       showSide("search");
       showPane("files");
@@ -1216,9 +1279,12 @@ async function boot() {
   refreshDownload();
   showTab(store.get("tab", "preview"));
   showPane(pane);
+  renderPage();
+  booted = true;
   restartTick();
   if (settings.main) compile();
   versions.refresh();
+  applications.refresh();
   initSpell();
 }
 
