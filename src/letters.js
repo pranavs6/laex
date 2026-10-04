@@ -106,7 +106,22 @@ export function initLetters(app) {
       api.json("/api/applications").catch(() => []),
     ]);
     if (current && !list.some((l) => l.id === current)) current = null;
+    // #/letters/<id> opens that letter (from Applications or the file tree).
+    const want = location.hash.split("/")[2];
+    if (want && list.some((l) => l.id === want)) current = want;
+    if (want) history.replaceState(null, "", "#/letters");
     render();
+  }
+
+  // The letter a PDF in coverLetters/ was downloaded from, going by its name
+  // (Name_CoverLetter_Company.pdf).
+  const compact = (s) => String(s || "").replace(/[^\p{L}\p{N}]+/gu, "");
+  function letterForFile(path) {
+    const name = path.split("/").pop().replace(/\.pdf$/i, "");
+    return list.find((l) => l.company && name.endsWith(`_CoverLetter_${compact(l.company)}`))?.id || null;
+  }
+  async function preload() {
+    list = await api.json("/api/letters").catch(() => []);
   }
 
   function render() {
@@ -354,5 +369,5 @@ export function initLetters(app) {
     root.querySelector("#letter-company")?.focus();
   }
 
-  return { refresh, flush };
+  return { refresh, flush, preload, letterForFile };
 }

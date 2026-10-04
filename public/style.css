@@ -688,12 +688,15 @@ body.is-dragging .lx-term, body.is-dragging .lx-pdf { pointer-events: none; }
 .lx-app-events__note { flex-basis: 100%; color: var(--text-2); }
 .lx-app-events li.is-upcoming .lx-app-events__date { color: var(--text); }
 .lx-app-event-rows { list-style: none; margin: 0 0 10px; padding: 0; }
+.lx-app-event-row.lx-app-link-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; }
+.lx-app-links { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; list-style: none; margin: 2px 0 0; padding: 0; font-size: .9375rem; }
 .lx-app-event-row { display: grid; grid-template-columns: 11em minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 8px; }
 .lx-app-event-row .lx-input { min-width: 0; width: 100%; height: 38px; font-size: 1rem; }
 @media (max-width: 600px) {
   .lx-app-event-row { grid-template-columns: minmax(0, 1fr) auto; padding-bottom: 10px; border-bottom: 1px solid var(--border-soft); }
   .lx-app-event-row .lx-input { grid-column: 1; }
   .lx-app-event-row .lx-link { grid-column: 2; grid-row: 1; }
+  .lx-app-event-row.lx-app-link-row { grid-template-columns: minmax(0, 1fr) auto; }
 }
 .lx-app-row { flex-wrap: wrap; gap: 0 20px; }
 .lx-app-row > .lx-form-group { flex: 1 1 200px; margin-bottom: 20px; }

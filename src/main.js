@@ -626,7 +626,7 @@ function treeRow(n, depth) {
   if (isActive) { row.classList.add("is-active"); row.setAttribute("aria-current", "true"); }
   if (isDir && n.path === selectedDir) row.classList.add("is-selected-dir");
   const viewable = !isDir && !n.text && /\.(pdf|png|jpe?g|gif|webp)$/i.test(n.path);
-  if (viewable) row.title = `Open ${n.path} in a new tab`;
+  if (viewable) row.title = letters.letterForFile(n.path) ? "Open this cover letter in the editor" : `Open ${n.path} in a new tab`;
   else if (!isDir && !n.text) { row.classList.add("is-disabled"); row.title = `${n.path} cannot be edited here`; }
 
   if (isDir) row.append(el("span", { className: "lx-row__toggle", "aria-hidden": "true" }));
@@ -656,7 +656,10 @@ function treeRow(n, depth) {
       selectedDir = parentOf(n.path);
       openFile(n.path).catch((e) => setStatus("Error", "red", e.message));
     } else if (viewable) {
-      window.open(`/api/raw?path=${encodeURIComponent(n.path)}`, "_blank", "noopener");
+      // A cover letter's PDF opens the letter itself, in its editor.
+      const letter = /\.pdf$/i.test(n.path) && letters.letterForFile(n.path);
+      if (letter) location.hash = `#/letters/${letter}`;
+      else window.open(`/api/raw?path=${encodeURIComponent(n.path)}`, "_blank", "noopener");
     }
   };
   row.addEventListener("click", activate);
@@ -886,7 +889,7 @@ function splitter(gutter, axis, cssVar, container, key, dflt) {
 const PAGES = { resume: "Resume", files: "Files and versions", applications: "Applications", letters: "Cover letters", notes: "Notes", settings: "Settings" };
 let page = "resume";
 let booted = false;
-const pageFromHash = () => { const p = location.hash.replace(/^#\/?/, ""); return PAGES[p] ? p : "resume"; };
+const pageFromHash = () => { const p = location.hash.replace(/^#\/?/, "").split("/")[0]; return PAGES[p] ? p : "resume"; };
 
 // Navigate to a page from code, e.g. opening a file from the Files page.
 function go(name) {
@@ -1103,6 +1106,7 @@ async function boot() {
   applications = initApplications(app);
   notes = initNotes(app);
   letters = initLetters(app);
+  letters.preload();
   jobmatch = initJobMatch(app);
   checks = initChecks(app);
   outline = initOutline(app);

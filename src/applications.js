@@ -18,14 +18,16 @@ export function initApplications(app) {
   const root = $("applications");
   let list = [];
   let versions = [];
+  let letters = [];
 
   // Still waiting to hear, and the follow-up date has come.
   const due = (a) => a.followUp && a.followUp <= today() && (a.status === "applied" || a.status === "interview");
 
   async function refresh() {
-    [list, versions] = await Promise.all([
+    [list, versions, letters] = await Promise.all([
       api.json("/api/applications").catch(() => []),
       api.json("/api/versions").catch(() => []),
+      api.json("/api/letters").catch(() => []),
     ]);
     app.onApplicationCount?.(list.length, list.filter(due).length);
     if (root.dataset.view !== "form") renderList();
@@ -71,7 +73,7 @@ export function initApplications(app) {
     body.append(counts);
 
     const sorted = [...list].sort((a, b) => (b.applied || "").localeCompare(a.applied || "") || b.created - a.created);
-    const dl = el("dl", { className: "lx-summary" });
+    const dl = el("dl", { className: "lx-summary lx-summary--stacked" });
     for (const a of sorted) dl.append(row(a));
     body.append(dl);
     root.replaceChildren(body);
@@ -101,6 +103,8 @@ export function initApplications(app) {
     const link = (text, props) => actions.append(el("li", {}, el("a", { className: "lx-link", textContent: text, ...props }, hidden())));
     act("Edit", () => renderForm(a));
     if (cv?.url) link("Download CV", { href: cv.url, download: `${cv.name}.pdf` });
+    const letter = letters.find((l) => l.application === a.id);
+    if (letter) link("Cover letter", { href: `#/letters/${letter.id}` });
     if (/^https?:\/\//i.test(a.link || "")) link("Open posting", { href: a.link, target: "_blank", rel: "noopener noreferrer" });
     act("Delete", () => confirmDelete(a, item));
 
@@ -111,9 +115,17 @@ export function initApplications(app) {
         el("span", { className: "lx-summary__meta", textContent: meta }),
         follow ? el("span", { className: "lx-summary__meta", textContent: follow }) : null,
         a.notes ? el("span", { className: "lx-summary__meta lx-app-note", textContent: a.notes.split("\n")[0] }) : null,
+        extraLinks(a),
         timeline(a)),
       el("dd", { className: "lx-summary__value lx-summary__value--app" }, status, el("div", { className: "lx-summary__clip" }, actions)));
     return item;
+  }
+
+  // Candidate portals and the like, opened in a new tab.
+  function extraLinks(a) {
+    if (!a.links?.length) return null;
+    return el("ul", { className: "lx-app-links" }, ...a.links.map((l) =>
+      el("li", {}, el("a", { className: "lx-link", href: l.url, target: "_blank", rel: "noopener noreferrer", textContent: l.label || new URL(l.url).hostname }))));
   }
 
   // Applied, then each event in date order. Events still to come say so.
@@ -199,7 +211,9 @@ export function initApplications(app) {
       const when = new Date(v.at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
       versionSel.append(new Option(`${v.label}${v.auto ? " (automatic)" : ""} · ${when}`, v.id));
     }
-    versionSel.value = a.version && versions.some((v) => v.id === a.version) ? a.version : manual[0]?.id || versions[0]?.id || "";
+    // A version since deleted stays selected, so saving doesn't swap the CV.
+    if (a.version && !versions.some((v) => v.id === a.version)) versionSel.prepend(new Option("(deleted version)", a.version));
+    versionSel.value = a.version || manual[0]?.id || versions[0]?.id || "";
     panes.version = versions.length
       ? group("app-version", "Version", versionSel, "The PDF saved with the version is the one you can download here.")
       : el("p", { className: "lx-hint", textContent: "No saved versions yet. Use Save version first, or upload a PDF." });
@@ -250,6 +264,28 @@ export function initApplications(app) {
       el("span", { className: "lx-hint", textContent: "Assessments, calls and interviews. Future ones show as upcoming." }),
       kinds, rows, addEvent));
 
+    // Extra links: a name and a web address each.
+    const linkRows = el("ol", { className: "lx-app-event-rows" });
+    const linkRow = (l = {}) => {
+      const label = el("input", { className: "lx-input", value: l.label || "", placeholder: "Name, e.g. Candidate portal", autocomplete: "off" });
+      const url = el("input", { className: "lx-input", type: "url", value: l.url || "", placeholder: "https://", autocomplete: "off" });
+      label.setAttribute("aria-label", "Link name");
+      url.setAttribute("aria-label", "Web address");
+      const remove = el("button", { type: "button", className: "lx-link", textContent: "Remove" });
+      const li = el("li", { className: "lx-app-event-row lx-app-link-row" }, label, url, remove);
+      li.read = () => ({ label: label.value.trim(), url: url.value.trim() });
+      remove.addEventListener("click", () => li.remove());
+      linkRows.append(li);
+      return label;
+    };
+    for (const l of a.links || []) linkRow(l);
+    const addLink = el("button", { type: "button", className: "lx-button lx-button--secondary lx-button--small", textContent: "Add link" });
+    addLink.addEventListener("click", () => linkRow().focus());
+    form.append(el("div", { className: "lx-form-group" },
+      el("span", { className: "lx-label", textContent: "Extra links" }),
+      el("span", { className: "lx-hint", textContent: "Candidate portal, recruiter page, test invitation." }),
+      linkRows, addLink));
+
     const link = input("app-link", a.link, { type: "url", placeholder: "https://" });
     const jd = el("textarea", { className: "lx-textarea", id: "app-jd", rows: 6, value: a.jd || "", spellcheck: false });
     const fromJob = el("button", { type: "button", className: "lx-link", textContent: "Copy from Job match" });
@@ -287,6 +323,7 @@ export function initApplications(app) {
           id: a.id, company: company.value.trim(), role: role.value.trim(), location: location.value.trim(), applied: applied.value, status: status.value,
           link: link.value.trim(), jd: jd.value, followUp: followUp.value, notes: notes.value,
           events: [...rows.children].map((li) => li.read()),
+          links: [...linkRows.children].map((li) => li.read()).filter((l) => l.url),
           version: mode === "version" ? versionSel.value : null,
           dropPdf: mode !== "upload", pdfName: pdfName.value.trim(),
         };

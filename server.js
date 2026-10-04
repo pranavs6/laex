@@ -761,7 +761,12 @@ async function handle(req, res) {
     case "GET /api/letters/pdf": {
       const { pdf, name } = await letterPdf(q.id, q.main);
       const headers = { "Content-Type": "application/pdf", "Cache-Control": "no-store" };
-      if (q.download) headers["Content-Disposition"] = `attachment; filename="${safeName(name) || "Cover letter"}.pdf"`;
+      if (q.download) {
+        headers["Content-Disposition"] = `attachment; filename="${safeName(name) || "Cover letter"}.pdf"`;
+        // Keep a copy with the project, where the file tree shows it.
+        await fsp.mkdir(inRoot("coverLetters"), { recursive: true });
+        await fsp.writeFile(inRoot(`coverLetters/${safeName(name) || "Cover letter"}.pdf`), pdf);
+      }
       res.writeHead(200, headers);
       return res.end(pdf);
     }
