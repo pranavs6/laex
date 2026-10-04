@@ -57,7 +57,7 @@ export function initVersions(app) {
     if (!list.length) {
       body.append(el("p", { className: "lx-empty", textContent: "No versions yet." }));
     } else {
-      const dl = el("dl", { className: "lx-summary" });
+      const dl = el("dl", { className: "lx-summary lx-summary--stacked" });
       for (const v of list) dl.append(versionRow(v));
       body.append(dl);
     }

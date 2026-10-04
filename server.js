@@ -17,6 +17,7 @@ import pty from "node-pty";
 import { createVersions } from "./lib/versions.js";
 import { createApplications } from "./lib/applications.js";
 import { createNotes } from "./lib/notes.js";
+import { createLetters, senderFrom, letterTex } from "./lib/letters.js";
 import { search, replace } from "./lib/search.js";
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -508,6 +509,38 @@ const versions = createVersions({
 });
 const applications = createApplications({ getRoot: () => ROOT });
 const notes = createNotes({ getRoot: () => ROOT });
+const letters = createLetters({ getRoot: () => ROOT });
+
+// Typesets a cover letter with the main CV's name and contact line. Built in
+// the cache, one folder per letter, with a single pdflatex run; one build at
+// a time, since the live preview asks for a new one on every pause in typing.
+let letterChain = Promise.resolve();
+function letterPdf(id, mainRel) {
+  const run = letterChain.then(() => buildLetter(id, mainRel));
+  letterChain = run.catch(() => {});
+  return run;
+}
+async function buildLetter(id, mainRel) {
+  const letter = await letters.get(id);
+  if (!letter) throw err(404, "no such letter");
+  const source = mainRel ? await fsp.readFile(inRoot(mainRel), "utf8").catch(() => "") : "";
+  const sender = senderFrom(source);
+  const dir = path.join(CACHE, "letters", hash(ROOT), id.replace(/[^\w-]/g, ""));
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.writeFile(path.join(dir, "letter.tex"), letterTex(letter, sender));
+  await fsp.rm(path.join(dir, "letter.pdf"), { force: true });
+  await new Promise((resolve) => execFile("pdflatex", ["-interaction=nonstopmode", "-halt-on-error", "letter.tex"],
+    { cwd: dir, env: { ...process.env, PATH: ENV_PATH }, timeout: 30_000 }, () => resolve()));
+  const pdf = await fsp.readFile(path.join(dir, "letter.pdf")).catch(() => null);
+  if (!pdf) {
+    const log = await fsp.readFile(path.join(dir, "letter.log"), "utf8").catch(() => "");
+    const why = log.match(/^! (.*)$/m)?.[1] || "pdflatex did not produce a PDF";
+    throw err(422, `The PDF could not be built: ${why}`);
+  }
+  const compact = (s) => String(s || "").replace(/[^\p{L}\p{N}]+/gu, "");
+  const name = [compact(sender.name), "CoverLetter", compact(letter.company)].filter(Boolean).join("_");
+  return { pdf, name };
+}
 
 // ------------------------------------------------------------- ask claude
 // "Ask Claude" buttons send a prompt to the terminal. If Claude is already
@@ -547,6 +580,8 @@ const MIME = {
   ".css": "text/css", ".svg": "image/svg+xml", ".map": "application/json", ".ttf": "font/ttf",
   ".woff2": "font/woff2", ".png": "image/png",
 };
+
+const VIEWABLE = { ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" };
 
 function send(res, status, body, type = "application/json") {
   const data = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -601,6 +636,16 @@ async function handle(req, res) {
       const { main, engine } = await readJson(req);
       inRoot(main);
       return send(res, 200, await compile(main, engine));
+    }
+    // PDFs and images in the project, shown as they are (opened from the file tree).
+    case "GET /api/raw": {
+      const type = VIEWABLE[path.extname(q.path || "").toLowerCase()];
+      if (!type) return send(res, 415, { error: "only PDFs and images can be opened" });
+      const data = await fsp.readFile(inRoot(q.path)).catch(() => null);
+      if (!data) return send(res, 404, { error: "not found" });
+      res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": `inline; filename="${safeName(path.basename(q.path, path.extname(q.path))) || "file"}${path.extname(q.path)}"` });
+      return res.end(data);
     }
     case "GET /api/pdf": {
       inRoot(q.main);
@@ -704,6 +749,22 @@ async function handle(req, res) {
     case "POST /api/applications/delete":
       await applications.remove((await readJson(req)).id);
       return send(res, 200, { ok: true });
+
+    // Cover letters
+    case "GET /api/letters":
+      return send(res, 200, await letters.list());
+    case "POST /api/letters":
+      return send(res, 200, await letters.save(await readJson(req)));
+    case "POST /api/letters/delete":
+      await letters.remove((await readJson(req)).id);
+      return send(res, 200, { ok: true });
+    case "GET /api/letters/pdf": {
+      const { pdf, name } = await letterPdf(q.id, q.main);
+      const headers = { "Content-Type": "application/pdf", "Cache-Control": "no-store" };
+      if (q.download) headers["Content-Disposition"] = `attachment; filename="${safeName(name) || "Cover letter"}.pdf"`;
+      res.writeHead(200, headers);
+      return res.end(pdf);
+    }
 
     // Notes
     case "GET /api/notes":

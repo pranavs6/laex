@@ -583,8 +583,15 @@ body.is-dragging .lx-term, body.is-dragging .lx-pdf { pointer-events: none; }
 /* Summary list (versions) */
 .lx-summary { margin: 0; border-top: 1px solid var(--border); }
 .lx-summary__row { display: flex; flex-wrap: wrap; gap: 8px 15px; align-items: flex-start; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.lx-summary__key { margin: 0; display: flex; flex: 1 1 220px; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
-.lx-summary__label { font-weight: 700; font-size: 1.0625rem; }
+/* The key never shrinks below its longest word, so a name like
+   PranavSathyaAR_Citadel_4Oct2026 pushes the links onto the next line
+   instead of running under them. Only a name wider than the whole row breaks. */
+.lx-summary__key { margin: 0; display: flex; flex: 1 1 220px; flex-wrap: wrap; align-items: center; gap: 4px 10px; max-width: 100%; }
+.lx-summary__label { font-weight: 700; font-size: 1.0625rem; overflow-wrap: break-word; max-width: 100%; }
+/* Stacked rows (versions): name across the full width, links underneath,
+   the same shape for every row however long the name. */
+.lx-summary--stacked .lx-summary__key { flex-basis: 100%; }
+.lx-summary--stacked .lx-summary__label { overflow-wrap: anywhere; }
 .lx-summary__meta { flex-basis: 100%; color: var(--text-2); font-size: .875rem; }
 /* Every link carries a divider on its left; the negative margin and clipping
    hide whichever divider starts a line, so wrapped rows read cleanly. */
@@ -734,7 +741,7 @@ body:not([data-page="resume"]) :is(.lx-phase, .lx-app, .lx-footer, .lx-panes) { 
 #nav-applications { display: inline-flex; align-items: center; }
 
 /* Notes */
-.lx-notes { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 40px; align-items: start; }
+.lx-notes { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 40px; align-items: start; }
 .lx-notes__items { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
 .lx-notes__item {
   display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 12px 12px 12px 15px; border: 0; border-bottom: 1px solid var(--border);
@@ -745,7 +752,7 @@ body:not([data-page="resume"]) :is(.lx-phase, .lx-app, .lx-footer, .lx-panes) { 
 .lx-notes__item[aria-current="true"] { box-shadow: inset 5px 0 0 var(--blue); background: var(--row-active); }
 .lx-notes__item[aria-current="true"] .lx-notes__title { color: var(--text); text-decoration: none; }
 .lx-notes__item:focus-visible { outline: 3px solid var(--yellow); outline-offset: -3px; }
-.lx-notes__title { font-weight: 700; font-size: 1.0625rem; text-decoration: underline; text-underline-offset: .15em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lx-notes__title { font-weight: 700; font-size: 1.0625rem; text-decoration: underline; text-underline-offset: .15em; overflow-wrap: anywhere; }
 .lx-notes__meta { color: var(--text-2); font-size: .875rem; }
 .lx-notes__back { display: none; }
 .lx-notes__title-input { height: 48px; font-size: 1.5rem; font-weight: 700; margin-bottom: 12px; }
@@ -754,6 +761,44 @@ body:not([data-page="resume"]) :is(.lx-phase, .lx-app, .lx-footer, .lx-panes) { 
 .lx-notes__status { margin: 0; font-size: .9375rem; }
 .lx-notes__body { min-height: 60vh; font: 1.0625rem/1.5 var(--font); }
 .lx-notes__editor .lx-empty { text-align: left; padding: 60px 0 0; }
+/* Cover letters: list, then a document view of editor beside live PDF */
+.lx-letters__items { max-width: 760px; }
+.lx-letter__title { overflow-wrap: anywhere; }
+.lx-letter__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px; align-items: start; }
+.lx-letter__fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; }
+.lx-letter__fields .lx-form-group { margin-bottom: 15px; }
+.lx-letter__fields .lx-form-group:last-child { grid-column: 1 / -1; }
+.lx-letter__fields .lx-input, .lx-letter__fields .lx-select { height: 38px; font-size: 1rem; }
+.lx-letter__paper { border: 2px solid var(--text); background: var(--card); }
+.lx-letter__paper:focus-within { outline: 3px solid var(--yellow); }
+.lx-letter__toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; border-bottom: 1px solid var(--border); background: var(--card-head); }
+.lx-letter__tool {
+  min-width: 36px; height: 32px; padding: 0 10px; border: 0; background: transparent; color: var(--text);
+  font: 700 .9375rem var(--font); cursor: pointer;
+}
+.lx-letter__tool:nth-child(2) { font-style: italic; font-family: Georgia, serif; }
+.lx-letter__tool:hover { background: var(--raise); }
+.lx-letter__tool[aria-pressed="true"] { background: var(--pressed-bg); color: var(--pressed-text); }
+.lx-letter__tool:focus-visible { background: var(--yellow); color: var(--black); outline: 3px solid transparent; }
+.lx-letter__doc {
+  min-height: 60vh; padding: 18px 22px; outline: none; overflow-wrap: anywhere; color: var(--text);
+  font: 1.0625rem/1.6 Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+}
+.lx-letter__doc a { color: var(--link); }
+.lx-letter__doc ul { margin: 0; padding-left: 1.4em; }
+.lx-letter__bar { margin: 10px 0 0; }
+.lx-letter__count { margin: 0 auto 0 0; font-size: .9375rem; }
+.lx-letter__actions { margin: 15px 0 5px; }
+.lx-letter__preview { position: sticky; top: 0; height: calc(100vh - var(--header-h) - 60px); }
+.lx-letter__preview .lx-card__head { min-height: 44px; }
+.lx-letter__pstatus { margin: 0 0 0 auto; font-size: .875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lx-letter__pdf { flex: 1; min-height: 0; }
+@media (max-width: 900px) {
+  .lx-letter__grid { grid-template-columns: minmax(0, 1fr); }
+  .lx-letter__preview { position: static; height: 80vh; }
+  .lx-letter__fields { grid-template-columns: minmax(0, 1fr); }
+  .lx-letter__doc { min-height: 45vh; }
+}
 
 /* ============================================================== touch + phone */
 .lx-pdf { touch-action: pan-x pan-y; }
@@ -849,7 +894,7 @@ body:not([data-page="resume"]) :is(.lx-phase, .lx-app, .lx-footer, .lx-panes) { 
   .lx-page__title, .lx-page .lx-panel__title { font-size: 1.75rem; }
   .lx-menu__grid { grid-template-columns: 1fr; gap: 24px; }
   .lx-nav { left: 0; width: auto; }
-  .lx-notes { grid-template-columns: 1fr; }
+  .lx-notes { grid-template-columns: minmax(0, 1fr); }
   .lx-notes.is-editing .lx-notes__list, .lx-notes:not(.is-editing) .lx-notes__editor { display: none; }
   .lx-notes__back { display: inline-flex; }
   .lx-notes__body { min-height: 50vh; }

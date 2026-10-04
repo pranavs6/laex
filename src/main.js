@@ -5,6 +5,7 @@ import { Spell } from "./spell.js";
 import { initVersions } from "./versions.js";
 import { initApplications } from "./applications.js";
 import { initNotes } from "./notes.js";
+import { initLetters } from "./letters.js";
 import { initJobMatch } from "./jobmatch.js";
 import { initChecks } from "./checks.js";
 import { initOutline } from "./outline.js";
@@ -182,7 +183,7 @@ function ask({ title, message = "", label = "", hint = "", value = "", confirm =
 }
 
 // -------------------------------------------------------------------- state
-let editor, term, pdf, pdf2, spell, versions, applications, notes, jobmatch, checks, outline, search, claude;
+let editor, term, pdf, pdf2, spell, versions, applications, notes, letters, jobmatch, checks, outline, search, claude;
 let settings;
 let needsCompile = false;
 let compiling = false;
@@ -624,7 +625,9 @@ function treeRow(n, depth) {
   if (isDir) row.setAttribute("aria-expanded", String(isOpen));
   if (isActive) { row.classList.add("is-active"); row.setAttribute("aria-current", "true"); }
   if (isDir && n.path === selectedDir) row.classList.add("is-selected-dir");
-  if (!isDir && !n.text) { row.classList.add("is-disabled"); row.title = `${n.path} cannot be edited here`; }
+  const viewable = !isDir && !n.text && /\.(pdf|png|jpe?g|gif|webp)$/i.test(n.path);
+  if (viewable) row.title = `Open ${n.path} in a new tab`;
+  else if (!isDir && !n.text) { row.classList.add("is-disabled"); row.title = `${n.path} cannot be edited here`; }
 
   if (isDir) row.append(el("span", { className: "lx-row__toggle", "aria-hidden": "true" }));
   row.append(el("span", { className: "lx-row__name", textContent: n.name }));
@@ -652,6 +655,8 @@ function treeRow(n, depth) {
     } else if (n.text) {
       selectedDir = parentOf(n.path);
       openFile(n.path).catch((e) => setStatus("Error", "red", e.message));
+    } else if (viewable) {
+      window.open(`/api/raw?path=${encodeURIComponent(n.path)}`, "_blank", "noopener");
     }
   };
   row.addEventListener("click", activate);
@@ -878,7 +883,7 @@ function splitter(gutter, axis, cssVar, container, key, dflt) {
 // ------------------------------------------------------------------- pages
 // The Menu switches between whole pages; the address (#/notes) says which,
 // so reload and Back work. Resume is the editor, terminal and preview.
-const PAGES = { resume: "Resume", files: "Files and versions", applications: "Applications", notes: "Notes", settings: "Settings" };
+const PAGES = { resume: "Resume", files: "Files and versions", applications: "Applications", letters: "Cover letters", notes: "Notes", settings: "Settings" };
 let page = "resume";
 let booted = false;
 const pageFromHash = () => { const p = location.hash.replace(/^#\/?/, ""); return PAGES[p] ? p : "resume"; };
@@ -892,6 +897,7 @@ function renderPage() {
   const prev = page;
   page = pageFromHash();
   if (prev === "notes" && page !== "notes") notes.flush();
+  if (prev === "letters" && page !== "letters") letters.flush();
   document.body.dataset.page = page;
   for (const s of document.querySelectorAll(".lx-page")) s.hidden = s.dataset.page !== page;
   for (const a of document.querySelectorAll("#menu [data-page]")) {
@@ -909,6 +915,7 @@ function renderPage() {
   if (page === "files") versions.refresh();
   if (page === "applications") applications.refresh();
   if (page === "notes") notes.refresh();
+  if (page === "letters") letters.refresh();
   if (page === "resume") updateDirty();
   else document.title = `${PAGES[page]} - LAEX`;
   showMainName();
@@ -1095,6 +1102,7 @@ async function boot() {
   versions = initVersions(app);
   applications = initApplications(app);
   notes = initNotes(app);
+  letters = initLetters(app);
   jobmatch = initJobMatch(app);
   checks = initChecks(app);
   outline = initOutline(app);
@@ -1223,7 +1231,7 @@ async function boot() {
     if (!menu.hidden && !menu.contains(e.target) && !menuBtn.contains(e.target)) setMenu(false);
   });
   window.addEventListener("hashchange", renderPage);
-  document.addEventListener("visibilitychange", () => { if (document.hidden) notes.flush(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { notes.flush(); letters.flush(); } });
 
   // Global shortcuts, in the capture phase so they work from the editor and
   // the terminal alike and win over CodeMirror's own bindings.
